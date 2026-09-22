@@ -445,6 +445,75 @@
                 }
             },
             methods: {
+                async initDB() {
+                    this.db = await idb.openDB('gtl_dashboard_db', 1, {
+                        upgrade(db) {
+                            if (!db.objectStoreNames.contains('cache')) {
+                                db.createObjectStore('cache');
+                            }
+                        }
+                    });
+                },
+                async loadFromCache() {
+                    try {
+                        const meta = await this.db.get('cache', 'metadata');
+                        if (meta && meta.total > 0) {
+                            let allRecords = [];
+                            for(let i=0; i<meta.chunks; i++) {
+                                let chunk = await this.db.get('cache', `chunk_${i}`);
+                                if(chunk) allRecords = allRecords.concat(chunk);
+                            }
+                            if(allRecords.length > 0) {
+                                this.rawData = allRecords;
+                                this.totalRecords = meta.total;
+                                this.isAllLoaded = meta.isAllLoaded || (allRecords.length >= meta.total);
+                                
+                                let savedDate = new Date(meta.timestamp);
+                                let timeStr = savedDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                                let dateStr = savedDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                this.cacheMsg = `Loaded ${allRecords.length} records from cache (saved at ${timeStr} ${dateStr})`;
+                                
+                                if (Date.now() - meta.timestamp > 6 * 3600 * 1000) {
+                                    this.cacheWarning = true;
+                                }
+                                this.updateCharts();
+                            }
+                        }
+                    } catch(e) {
+                        console.error("Cache load error", e);
+                    }
+                },
+                async saveToCache(records, total, isAllLoaded) {
+                    try {
+                        const tx = this.db.transaction('cache', 'readwrite');
+                        const store = tx.objectStore('cache');
+                        let chunkSize = 5000;
+                        let chunks = Math.ceil(records.length / chunkSize);
+                        for(let i=0; i<chunks; i++) {
+                            await store.put(records.slice(i*chunkSize, (i+1)*chunkSize), `chunk_${i}`);
+                        }
+                        await store.put({
+                            timestamp: Date.now(),
+                            total: total,
+                            chunks: chunks,
+                            isAllLoaded: isAllLoaded
+                        }, 'metadata');
+                        await tx.done;
+                    } catch(e) {
+                        console.error("Cache save error", e);
+                    }
+                },
+                async forceRefresh() {
+                    if (this.db) {
+                        await this.db.clear('cache');
+                    }
+                    this.cacheMsg = '';
+                    this.cacheWarning = false;
+                    this.rawData = [];
+                    this.page = 1;
+                    this.refresh();
+                },
+
                 toggle(opt) {
                     let val = [...this.modelValue];
                     let idx = val.indexOf(opt);
@@ -622,6 +691,75 @@
             },
             beforeUnmount() { if(this.refreshTimer) clearInterval(this.refreshTimer); },
             methods: {
+                async initDB() {
+                    this.db = await idb.openDB('gtl_dashboard_db', 1, {
+                        upgrade(db) {
+                            if (!db.objectStoreNames.contains('cache')) {
+                                db.createObjectStore('cache');
+                            }
+                        }
+                    });
+                },
+                async loadFromCache() {
+                    try {
+                        const meta = await this.db.get('cache', 'metadata');
+                        if (meta && meta.total > 0) {
+                            let allRecords = [];
+                            for(let i=0; i<meta.chunks; i++) {
+                                let chunk = await this.db.get('cache', `chunk_${i}`);
+                                if(chunk) allRecords = allRecords.concat(chunk);
+                            }
+                            if(allRecords.length > 0) {
+                                this.rawData = allRecords;
+                                this.totalRecords = meta.total;
+                                this.isAllLoaded = meta.isAllLoaded || (allRecords.length >= meta.total);
+                                
+                                let savedDate = new Date(meta.timestamp);
+                                let timeStr = savedDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                                let dateStr = savedDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                this.cacheMsg = `Loaded ${allRecords.length} records from cache (saved at ${timeStr} ${dateStr})`;
+                                
+                                if (Date.now() - meta.timestamp > 6 * 3600 * 1000) {
+                                    this.cacheWarning = true;
+                                }
+                                this.updateCharts();
+                            }
+                        }
+                    } catch(e) {
+                        console.error("Cache load error", e);
+                    }
+                },
+                async saveToCache(records, total, isAllLoaded) {
+                    try {
+                        const tx = this.db.transaction('cache', 'readwrite');
+                        const store = tx.objectStore('cache');
+                        let chunkSize = 5000;
+                        let chunks = Math.ceil(records.length / chunkSize);
+                        for(let i=0; i<chunks; i++) {
+                            await store.put(records.slice(i*chunkSize, (i+1)*chunkSize), `chunk_${i}`);
+                        }
+                        await store.put({
+                            timestamp: Date.now(),
+                            total: total,
+                            chunks: chunks,
+                            isAllLoaded: isAllLoaded
+                        }, 'metadata');
+                        await tx.done;
+                    } catch(e) {
+                        console.error("Cache save error", e);
+                    }
+                },
+                async forceRefresh() {
+                    if (this.db) {
+                        await this.db.clear('cache');
+                    }
+                    this.cacheMsg = '';
+                    this.cacheWarning = false;
+                    this.rawData = [];
+                    this.page = 1;
+                    this.refresh();
+                },
+
                 getVal(row, possibleKeys) {
                     for(let k of possibleKeys) {
                         if (row[k] !== undefined && row[k] !== null && row[k] !== '') {
