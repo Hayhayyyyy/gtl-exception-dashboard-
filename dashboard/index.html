@@ -375,7 +375,7 @@
                 excludeTestAWB: true,
                 defaultDays: 60,
                 priority: '100',
-                status: '100,200,300',
+                status: '100,200',
                 exceptionType: '100,200'
             }
         };
@@ -1030,12 +1030,23 @@
             setLoading(true, 'Initializing fetch...');
             try {
                 let initial = await retryFetch(`search?page=1&page_size=10${filters}`);
-                if (initial.base_resp && initial.base_resp.code !== 0) throw new Error(initial.base_resp.status_message || 'API Error');
+                console.log('Parsing response, keys:', Object.keys(initial));
                 
-                state.totalRecords = initial.pagination ? initial.pagination.total_data : 0;
-                if (!state.totalRecords) {
-                    let dArr = initial.ehc_data || initial.items || [];
-                    if (dArr.length > 0) state.totalRecords = dArr.length;
+                try {
+                    if (initial.data && initial.data.base_resp && initial.data.base_resp.code !== 0) {
+                        throw new Error(initial.data.base_resp.message || 'API Error');
+                    }
+                    
+                    let innerData = (initial.data && initial.data.data) ? initial.data.data : {};
+                    state.totalRecords = innerData.total || 0;
+                    
+                    if (!state.totalRecords) {
+                        let dArr = innerData.list || [];
+                        if (dArr.length > 0) state.totalRecords = dArr.length;
+                    }
+                } catch (parseErr) {
+                    console.error("Error during initial parsing:", parseErr);
+                    throw parseErr;
                 }
                 
                 state.rawData = [];
@@ -1044,7 +1055,17 @@
                 while (currentPage <= safetyCap) {
                     setLoading(true, `Loading page ${currentPage} ... (${state.rawData.length} records)`);
                     let res = await retryFetch(`search?page=${currentPage}&page_size=1000${filters}`);
-                    let arr = res.ehc_data || res.items || [];
+                    console.log(`Parsing response for page ${currentPage}, keys:`, Object.keys(res));
+                    
+                    let arr = [];
+                    try {
+                        let innerResData = (res.data && res.data.data) ? res.data.data : {};
+                        arr = innerResData.list || [];
+                    } catch (parseErr) {
+                        console.error(`Error parsing page ${currentPage}:`, parseErr);
+                        throw parseErr;
+                    }
+                    
                     if (!arr || arr.length === 0) break;
                     
                     state.rawData = state.rawData.concat(arr);
