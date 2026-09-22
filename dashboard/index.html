@@ -973,7 +973,7 @@
             return new Promise((resolve, reject) => {
                 let id = 'req_' + Math.random().toString(36).substr(2, 9);
                 let listener = (event) => {
-                    if (event.source !== window || !event.data || event.data.id !== id) return;
+                    if (event.source !== window || !event.data || event.data.id !== id || event.data.source !== 'GTL_EXTENSION') return;
                     window.removeEventListener('message', listener);
                     if (event.data.response && event.data.response.error) reject(new Error(event.data.response.error));
                     else resolve(event.data.response.data);
