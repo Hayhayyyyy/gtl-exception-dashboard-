@@ -521,12 +521,19 @@
 
         function markExtActive() {
             if(state.extInstalled) return;
+            console.log("Extension marked as ACTIVE.");
             state.extInstalled = true;
             els.extStatus.classList.remove('text-red-400');
             els.extStatus.classList.add('text-green-400');
             els.extStatus.innerHTML = '<i class="fa-solid fa-circle-check mr-2"></i> Ext Active';
             els.btnSync.disabled = state.loading;
             els.btnExport.disabled = state.loading;
+            
+            // Auto-load if empty
+            if (state.rawData.length === 0 && !state.loading) {
+                console.log("Auto-loading data because extension became active and no data is loaded yet.");
+                loadAllData();
+            }
         }
 
         // --- Data Logic ---
@@ -971,9 +978,11 @@
 
         function fetchGTL(url, body) {
             return new Promise((resolve, reject) => {
+                console.log("fetchGTL called for URL:", url);
                 let id = 'req_' + Math.random().toString(36).substr(2, 9);
                 let listener = (event) => {
                     if (event.source !== window || !event.data || event.data.id !== id || event.data.source !== 'GTL_EXTENSION') return;
+                    console.log("Received GTL_EXTENSION response for", url, event.data.response);
                     window.removeEventListener('message', listener);
                     if (event.data.response && event.data.response.error) reject(new Error(event.data.response.error));
                     else resolve(event.data.response.data);
@@ -1012,6 +1021,7 @@
         }
 
         async function loadAllData() {
+            console.log("loadAllData() triggered. Clearing errors and setting up...");
             showError(null);
             els.cacheAlert.classList.add('hidden');
             let currentPage = 1;
@@ -1060,6 +1070,7 @@
 
         // --- Event Listeners ---
         els.btnSync.addEventListener('click', () => {
+            console.log("Sync GTL button clicked!");
             if(state.db) state.db.clear('cache');
             els.cacheText.innerText = '';
             els.cacheAlert.classList.add('hidden');
