@@ -316,9 +316,9 @@
                                 <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 mb-6">
                                     <h5 class="text-sm font-bold text-cyan-400 mb-3"><i class="fa-solid fa-book mr-2"></i>Code Reference</h5>
                                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-400">
-                                        <div><strong class="text-gray-200">Status Codes:</strong><ul class="mt-1 space-y-1"><li>100 = Over SLA</li><li>200 = Waiting Feedback</li><li>300 = Feedback Submitted</li></ul></div>
-                                        <div><strong class="text-gray-200">Priority Codes:</strong><ul class="mt-1 space-y-1"><li>Leave empty to fetch all priorities (P0, P1, P2, P3).</li><li>Numeric codes unknown — use empty to get all.</li></ul></div>
-                                        <div><strong class="text-gray-200">Exception Types:</strong><ul class="mt-1 space-y-1"><li>100 = Time Issue</li><li>200 = Status Issue</li><li>Leave empty to fetch all (including DBNR codes).</li></ul></div>
+                                        <div><strong class="text-gray-200">Status Codes (Server-Side):</strong><ul class="mt-1 space-y-1"><li>100 = Over SLA</li><li>200 = Waiting Feedback</li><li>300 = Feedback Submitted</li></ul></div>
+                                        <div><strong class="text-gray-200">Priority Codes (Client-Side Only):</strong><ul class="mt-1 space-y-1"><li>"P0" = Highest Priority (TTS_Ticket/DBNR)</li><li>"P1" = P1</li><li><em>Handled dynamically after data loads.</em></li></ul></div>
+                                        <div><strong class="text-gray-200">Exception Types (Client-Side Only):</strong><ul class="mt-1 space-y-1"><li>"Status issue/..." → Status Issue</li><li>"Time issue/..." → Time Issue</li><li>Any containing "Delivered But Not Received" → DBNR</li></ul></div>
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -327,18 +327,9 @@
                                         <input type="number" id="set-days" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition">
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-400 mb-1">Priority Codes</label>
-                                        <input type="text" id="set-priority" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition">
-                                        <p class="text-[10px] text-gray-500 mt-1">Leave empty to fetch all</p>
-                                    </div>
-                                    <div>
                                         <label class="block text-sm font-medium text-gray-400 mb-1">Status Codes</label>
                                         <input type="text" id="set-status" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-400 mb-1">Exception Type Codes</label>
-                                        <input type="text" id="set-type" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition">
-                                        <p class="text-[10px] text-gray-500 mt-1">Leave empty to fetch all</p>
+                                        <p class="text-[10px] text-gray-500 mt-1">GTL API takes numeric codes (e.g. 100,200,300)</p>
                                     </div>
                                 </div>
                             </div>
@@ -410,7 +401,20 @@
         // --- Helpers ---
         const getVal = (r, keys) => { for (let k of keys) { if (r[k] !== undefined && r[k] !== null && r[k] !== '') return r[k]; } return null; };
         const getTracking = r => getVal(r, ['tracking_number', 'awb_number', 'waybill_number', 'tracking_id']) || '-';
-        const getReason = r => getVal(r, ['exception_reason', 'exception_type', 'reason', 'type']) || 'Unknown';
+        const getReason = r => {
+            let val = getVal(r, ['exception_reason', 'exception_type', 'reason', 'type']);
+            if (!val || val === '-') return 'Unknown';
+            let s = String(val);
+            let sLower = s.toLowerCase();
+            if (sLower.includes('delivered but not received')) return 'DBNR';
+            if (sLower.includes('status issue') || sLower.includes('status stuck')) return 'Status Issue';
+            if (sLower.includes('time issue') || sLower.includes('over delivery time') || sLower.includes('sla breach')) return 'Time Issue';
+            if (sLower.includes('delivery progress')) return 'Delivery Progress';
+            if (sLower.includes('failed delivery')) return 'Failed Delivery';
+            if (sLower.includes('pofd check')) return 'POFD Check';
+            let parts = s.split('/');
+            return parts[parts.length - 1] || s;
+        };
         const getPriority = r => getVal(r, ['priority', 'priority_level']) || 'Unknown';
         const getStatus = r => { 
             let s = getVal(r, ['exception_status', 'status']); 
@@ -623,9 +627,10 @@
                 let wantsDbnr = f.type.includes('DBNR');
                 let normalTypes = f.type.filter(t => t !== 'DBNR');
                 d = d.filter(x => {
-                    let isDbnr = getSource(x) === 'TTS_Ticket' || String(getReason(x)).toLowerCase().includes('delivered but not received');
+                    let r = getReason(x);
+                    let isDbnr = r === 'DBNR' || getSource(x) === 'TTS_Ticket';
                     if (wantsDbnr && isDbnr) return true;
-                    if (normalTypes.length > 0 && normalTypes.includes(getReason(x))) return true;
+                    if (normalTypes.length > 0 && normalTypes.includes(r)) return true;
                     return false;
                 });
             }
@@ -751,7 +756,7 @@
             els.kpiAging7.innerText = aging7;
             els.kpiAging14.innerText = aging14;
             
-            let dbnrCount = d.filter(x => getSource(x) === 'TTS_Ticket' || String(getReason(x)).toLowerCase().includes('delivered but not received')).length;
+            let dbnrCount = d.filter(x => getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR').length;
             if (els.kpiDbnr) els.kpiDbnr.innerText = dbnrCount;
 
             if (d.length > 0) {
@@ -1004,7 +1009,7 @@
             if (cDbnr && state.view === 'view-analytics') {
                 let dData = {};
                 data.forEach(x => { 
-                    if (getSource(x) === 'TTS_Ticket' || String(getReason(x)).toLowerCase().includes('delivered but not received')) {
+                    if (getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR') {
                         let c = getCreated(x); 
                         if(c && c !== '-') { 
                             let dt = new Date(c * 1000).toISOString().split('T')[0]; 
@@ -1125,10 +1130,8 @@
             start.setDate(end.getDate() - state.settings.defaultDays);
             let startStr = start.toISOString().split('T')[0] + "T00:00:00%2B07:00";
             let endStr = end.toISOString().split('T')[0] + "T23:59:59%2B07:00";
-            let p = state.settings.priority ? `&priority=${state.settings.priority}` : '';
             let s = state.settings.status ? `&status=${state.settings.status}` : '';
-            let t = state.settings.exceptionType ? `&exception_type=${state.settings.exceptionType}` : '';
-            return `&exception_created_time_range_gte=${startStr}&exception_created_time_range_lte=${endStr}${p}${s}${t}`;
+            return `&exception_created_time_range_gte=${startStr}&exception_created_time_range_lte=${endStr}${s}`;
         }
 
         function fetchGTL(url, body) {
@@ -1300,7 +1303,7 @@
         els.btnLoadRem.addEventListener('click', () => loadAllData());
         
         if (els.btnDbnr) els.btnDbnr.addEventListener('click', () => {
-            let dbnrTypes = [...new Set(state.rawData.filter(x => String(getReason(x)).toLowerCase().includes('delivered but not received')).map(x => getReason(x)))];
+            let dbnrTypes = ['DBNR'];
             if (dbnrTypes.length === 0) {
                 alert("No DBNR records found in currently loaded data. Ensure exception filters are clear and data is fetched.");
                 return;
@@ -1437,9 +1440,7 @@
             }
 
             document.getElementById('set-days').value = state.settings.defaultDays;
-            document.getElementById('set-priority').value = state.settings.priority;
             document.getElementById('set-status').value = state.settings.status;
-            document.getElementById('set-type').value = state.settings.exceptionType;
             document.getElementById('set-exclude').checked = state.settings.excludeTestAWB;
             document.getElementById('set-auto-refresh').checked = state.settings.autoRefresh;
             document.getElementById('set-interval').value = state.settings.refreshInterval;
