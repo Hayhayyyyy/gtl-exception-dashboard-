@@ -279,6 +279,16 @@
                             <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Facility Performance (Exception Count by Hub)</h3>
                             <div id="chartHubPerf" class="chart-container" style="height: 350px;"></div>
                         </div>
+                        
+                        <!-- DBNR Deep Dive Row -->
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-orange-900/50 xl:col-span-2">
+                            <h3 class="text-sm font-semibold text-orange-400 mb-4 uppercase tracking-wider">📦 DBNR Cases by Facility</h3>
+                            <div id="chartDbnrFacility" class="chart-container" style="height: 350px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-orange-900/50">
+                            <h3 class="text-sm font-semibold text-orange-400 mb-4 uppercase tracking-wider">DBNR Trend (Top 5 Hubs)</h3>
+                            <div id="chartDbnrTrendTop5" class="chart-container" style="height: 350px;"></div>
+                        </div>
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800 xl:col-span-2">
                             <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Trend (Created Time)</h3>
                             <div id="chartAnalyticsDaily" class="chart-container" style="height: 300px;"></div>
@@ -1094,6 +1104,81 @@
                         { name: 'Feedback Submitted', type: 'bar', stack: 'total', itemStyle: {color: '#22d3ee'}, data: topHubs.map(h => hData[h]['Feedback Submitted']) },
                         { name: 'Other', type: 'bar', stack: 'total', itemStyle: {color: '#6b7280'}, data: topHubs.map(h => hData[h]['Other']) }
                     ]
+                }, true);
+            }
+
+            // 9. Analytics: DBNR Cases by Facility
+            let cDbnrFac = getChart('chartDbnrFacility');
+            let top5DbnrHubs = [];
+            if (cDbnrFac && state.view === 'view-analytics') {
+                let dbnrData = data.filter(x => getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR');
+                let fData = {};
+                dbnrData.forEach(x => {
+                    let f = getFacility(x);
+                    let s = getStatus(x);
+                    if(f !== 'Unknown' && f !== '-') {
+                        if(!fData[f]) fData[f] = {'Over SLA':0, 'Waiting Feedback':0, 'Feedback Submitted':0, 'Other':0};
+                        if (['Over SLA', 'Waiting Feedback', 'Feedback Submitted'].includes(s)) {
+                            fData[f][s]++;
+                        } else {
+                            fData[f]['Other']++;
+                        }
+                    }
+                });
+                let topHubs = Object.keys(fData).sort((a,b) => {
+                    return Object.values(fData[b]).reduce((s,v)=>s+v,0) - Object.values(fData[a]).reduce((s,v)=>s+v,0);
+                }).slice(0, 20);
+                top5DbnrHubs = topHubs.slice(0, 5); // Save for next chart
+                
+                cDbnrFac.setOption({
+                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                    legend: { data: ['Over SLA', 'Waiting Feedback', 'Feedback Submitted', 'Other'], bottom: 0, textStyle: {color: '#9ca3af'} },
+                    grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                    xAxis: { type: 'category', data: topHubs, axisLabel: { interval: 0, rotate: 30, width: 100, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} },
+                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                    series: [
+                        { name: 'Over SLA', type: 'bar', stack: 'total', itemStyle: {color: '#f43f5e'}, data: topHubs.map(h => fData[h]['Over SLA']) },
+                        { name: 'Waiting Feedback', type: 'bar', stack: 'total', itemStyle: {color: '#f59e0b'}, data: topHubs.map(h => fData[h]['Waiting Feedback']) },
+                        { name: 'Feedback Submitted', type: 'bar', stack: 'total', itemStyle: {color: '#22d3ee'}, data: topHubs.map(h => fData[h]['Feedback Submitted']) },
+                        { name: 'Other', type: 'bar', stack: 'total', itemStyle: {color: '#6b7280'}, data: topHubs.map(h => fData[h]['Other']) }
+                    ]
+                }, true);
+            }
+
+            // 10. Analytics: DBNR Trend Top 5 Hubs
+            let cDbnrTrend5 = getChart('chartDbnrTrendTop5');
+            if (cDbnrTrend5 && state.view === 'view-analytics' && top5DbnrHubs.length > 0) {
+                let seriesData = {};
+                let dates = new Set();
+                top5DbnrHubs.forEach(h => seriesData[h] = {});
+                
+                let dbnrData = data.filter(x => getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR');
+                dbnrData.forEach(x => {
+                    let f = getFacility(x);
+                    if (top5DbnrHubs.includes(f)) {
+                        let c = getCreated(x);
+                        if (c && c !== '-') {
+                            let dt = new Date(c * 1000).toISOString().split('T')[0];
+                            dates.add(dt);
+                            seriesData[f][dt] = (seriesData[f][dt] || 0) + 1;
+                        }
+                    }
+                });
+                
+                let sortedDates = Array.from(dates).sort();
+                let series = top5DbnrHubs.map((h, i) => ({
+                    name: h, type: 'line', smooth: true,
+                    itemStyle: { color: colors[i % colors.length] },
+                    data: sortedDates.map(d => seriesData[h][d] || 0)
+                }));
+                
+                cDbnrTrend5.setOption({
+                    tooltip: { trigger: 'axis', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                    legend: { data: top5DbnrHubs, bottom: 0, textStyle: {color: '#9ca3af'}, type: 'scroll' },
+                    grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                    xAxis: { type: 'category', data: sortedDates, axisLine: {lineStyle: {color: '#374151'}} },
+                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                    series: series
                 }, true);
             }
 
