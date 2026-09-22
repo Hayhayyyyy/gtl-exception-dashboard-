@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "GTL Exception Dashboard",
-  "version": "3.0",
+  "version": "3.1",
   "description": "Intercepts GTL session data automatically to power the Realtime Dashboard.",
   "permissions": ["webRequest", "storage"],
   "host_permissions": [
     "https://gtl-id.tokgistic.com/*",
     "https://*.aime-site.tiktok-row.net/*",
-    "https://*.tiktok-row.net/*"
+    "https://*.tiktok-row.net/*",
+    "https://gtl-dashboard-a43c1.web.app/*",
+    "https://gtl-dashboard-a43c1.firebaseapp.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -17,7 +19,9 @@
     {
       "matches": [
         "https://*.aime-site.tiktok-row.net/*",
-        "https://*.tiktok-row.net/*"
+        "https://*.tiktok-row.net/*",
+        "https://gtl-dashboard-a43c1.web.app/*",
+        "https://gtl-dashboard-a43c1.firebaseapp.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_end"
