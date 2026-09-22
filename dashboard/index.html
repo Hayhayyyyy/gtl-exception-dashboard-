@@ -317,8 +317,8 @@
                                     <h5 class="text-sm font-bold text-cyan-400 mb-3"><i class="fa-solid fa-book mr-2"></i>Code Reference</h5>
                                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-400">
                                         <div><strong class="text-gray-200">Status Codes:</strong><ul class="mt-1 space-y-1"><li>100 = Over SLA</li><li>200 = Waiting Feedback</li><li>300 = Feedback Submitted</li></ul></div>
-                                        <div><strong class="text-gray-200">Priority Codes:</strong><ul class="mt-1 space-y-1"><li>100 = P1</li><li>P0 = Highest Priority (TTS_Ticket, DBNR)</li></ul></div>
-                                        <div><strong class="text-gray-200">Exception Types:</strong><ul class="mt-1 space-y-1"><li>100 = Time Issue</li><li>200 = Status Issue</li><li>DBNR = Delivered But Not Received</li></ul></div>
+                                        <div><strong class="text-gray-200">Priority Codes:</strong><ul class="mt-1 space-y-1"><li>Leave empty to fetch all priorities (P0, P1, P2, P3).</li><li>Numeric codes unknown — use empty to get all.</li></ul></div>
+                                        <div><strong class="text-gray-200">Exception Types:</strong><ul class="mt-1 space-y-1"><li>100 = Time Issue</li><li>200 = Status Issue</li><li>Leave empty to fetch all (including DBNR codes).</li></ul></div>
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -564,7 +564,12 @@
             if(!msg) {
                 els.errorAlert.classList.add('hidden');
             } else {
-                els.errorText.innerText = msg;
+                // If it starts with a tag, treat as html
+                if(msg.trim().startsWith('<')) {
+                    els.errorAlert.innerHTML = msg;
+                } else {
+                    els.errorText.innerText = msg;
+                }
                 els.errorAlert.classList.remove('hidden');
                 console.error(msg);
             }
@@ -1414,6 +1419,23 @@
             if(s) {
                 try { Object.assign(state.settings, JSON.parse(s)); } catch(e){}
             }
+            
+            // Clean invalid non-numeric values from Priority and ExceptionType
+            let pStr = String(state.settings.priority || '');
+            let eStr = String(state.settings.exceptionType || '');
+            let pValid = pStr === '' || /^[0-9, ]+$/.test(pStr);
+            let eValid = eStr === '' || /^[0-9, ]+$/.test(eStr);
+            
+            if (!pValid || !eValid) {
+                console.warn("Invalid non-numeric filters found. Resetting to empty to prevent API crash.", {pStr, eStr});
+                state.settings.priority = pValid ? pStr : '';
+                state.settings.exceptionType = eValid ? eStr : '';
+                saveSettings();
+                
+                let errHtml = `⚠️ Invalid text filters ("P0", "DBNR") detected in settings and reset. Please Clear Local Cache (in Settings) and Sync GTL to reload all data correctly.`;
+                showError(errHtml);
+            }
+
             document.getElementById('set-days').value = state.settings.defaultDays;
             document.getElementById('set-priority').value = state.settings.priority;
             document.getElementById('set-status').value = state.settings.status;
