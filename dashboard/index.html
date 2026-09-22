@@ -125,9 +125,9 @@
                             <div class="text-yellow-500 text-xs font-medium mb-1 uppercase tracking-wider">Wait Feedback</div>
                             <div id="kpi-wait" class="text-2xl font-bold text-yellow-500">0</div>
                         </div>
-                        <div class="bg-navy-800 rounded-xl p-4 border border-blue-900/30 shadow-lg flex flex-col justify-center">
-                            <div class="text-blue-400 text-xs font-medium mb-1 uppercase tracking-wider">Submitted</div>
-                            <div id="kpi-submit" class="text-2xl font-bold text-blue-400">0</div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-purple-900/30 shadow-lg flex flex-col justify-center">
+                            <div class="text-purple-400 text-xs font-medium mb-1 uppercase tracking-wider">Status: Over SLA</div>
+                            <div id="kpi-submit" class="text-2xl font-bold text-purple-400">0</div>
                         </div>
                         <div class="bg-navy-800 rounded-xl p-4 border border-indigo-900/50 shadow-[0_0_15px_rgba(99,102,241,0.05)] flex flex-col justify-center">
                             <div class="text-indigo-400 text-xs font-medium mb-1 uppercase tracking-wider">Avg Age</div>
@@ -141,9 +141,9 @@
                             <div class="text-rose-500 text-xs font-medium mb-1 uppercase tracking-wider">Aging > 14d</div>
                             <div id="kpi-aging14" class="text-2xl font-bold text-rose-500">0</div>
                         </div>
-                        <div class="bg-navy-800 rounded-xl p-4 border border-emerald-900/30 shadow-lg flex flex-col justify-center">
-                            <div class="text-emerald-400 text-xs font-medium mb-1 uppercase tracking-wider">Closed</div>
-                            <div id="kpi-closed" class="text-2xl font-bold text-emerald-400">0</div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-cyan-900/50 shadow-lg flex flex-col justify-center">
+                            <div class="text-cyan-400 text-xs font-medium mb-1 uppercase tracking-wider">Feedback Submitted</div>
+                            <div id="kpi-closed" class="text-2xl font-bold text-cyan-400">0</div>
                         </div>
                     </div>
 
@@ -371,7 +371,7 @@
                 excludeTestAWB: true,
                 defaultDays: 60,
                 priority: '100',
-                status: '100,200',
+                status: '100,200,300',
                 exceptionType: '100,200'
             }
         };
@@ -381,7 +381,16 @@
         const getTracking = r => getVal(r, ['tracking_number', 'awb_number', 'waybill_number', 'tracking_id']) || '-';
         const getReason = r => getVal(r, ['exception_reason', 'exception_type', 'reason', 'type']) || 'Unknown';
         const getPriority = r => getVal(r, ['priority', 'priority_level']) || 'Unknown';
-        const getStatus = r => { let s = getVal(r, ['exception_status', 'status']); if(typeof s === 'object' && s !== null) return s.name || 'Unknown'; return s || 'Unknown'; };
+        const getStatus = r => { 
+            let s = getVal(r, ['exception_status', 'status']); 
+            let val = typeof s === 'object' && s !== null ? (s.id || s.name || s) : s;
+            val = String(val);
+            if (val === '100' || val.toLowerCase() === 'over sla') return 'Over SLA';
+            if (val === '200' || val.toLowerCase() === 'waiting feedback' || val.toLowerCase().includes('wait')) return 'Waiting Feedback';
+            if (val === '300' || val.toLowerCase() === 'feedback submitted' || val.toLowerCase().includes('submit')) return 'Feedback Submitted';
+            if(typeof s === 'object' && s !== null) return s.name || 'Unknown'; 
+            return s || 'Unknown'; 
+        };
         const getSource = r => getVal(r, ['source', 'exception_source']) || 'Unknown';
         const getFacility = r => getVal(r, ['assigned_facility', 'current_facility', 'facility']) || 'Unknown';
         const getLeg = r => getVal(r, ['shipment_leg_type', 'shipment_leg', 'leg']) || 'Unknown';
@@ -658,10 +667,15 @@
         function renderKPIs() {
             let d = state.filteredData;
             let now = Date.now() / 1000;
-            let overSla = d.filter(x => getSLA(x)).length;
-            let waiting = d.filter(x => { let s = String(getStatus(x)).toLowerCase(); return s.includes('wait') || s.includes('pending'); }).length;
-            let submitted = d.filter(x => { let s = String(getStatus(x)).toLowerCase(); return s.includes('submit'); }).length;
-            let closed = d.filter(x => { let s = String(getStatus(x)).toLowerCase(); return s.includes('close') || s.includes('resolved'); }).length;
+            let overSla = d.filter(x => getSLA(x) || getStatus(x) === 'Over SLA').length;
+            let waiting = d.filter(x => getStatus(x) === 'Waiting Feedback').length;
+            let submitted = d.filter(x => getStatus(x) === 'Feedback Submitted').length;
+            let closed = d.filter(x => getStatus(x) === 'Feedback Submitted').length; // mapped to kpi-closed element
+            
+            // Log DBNR Exception Types for the user
+            let dbnrTypes = [...new Set(d.filter(x => String(getReason(x)).toLowerCase().includes('delivered but not received')).map(x => `${getReason(x)} (Code: ${x.exception_type})`))];
+            if(dbnrTypes.length > 0) console.log('DBNR Exception Types found in data:', dbnrTypes);
+
             let totalAgeDays = 0, aging7 = 0, aging14 = 0, validAges = 0;
             
             let fCount = {}, tCount = {};
@@ -684,7 +698,7 @@
             els.kpiOverSla.innerText = overSla;
             els.kpiOverSlaPct.innerText = d.length > 0 ? `(${((overSla / d.length) * 100).toFixed(1)}%)` : '(0%)';
             els.kpiWait.innerText = waiting;
-            els.kpiSubmit.innerText = submitted;
+            els.kpiSubmit.innerText = d.filter(x => getStatus(x) === 'Over SLA').length;
             els.kpiClosed.innerText = closed;
             els.kpiAvgAge.innerText = validAges > 0 ? (totalAgeDays / validAges).toFixed(1) : '0';
             els.kpiAging7.innerText = aging7;
