@@ -150,12 +150,12 @@
                     <!-- Top 2 Charts -->
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="charts-dashboard" style="display:none;">
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Exceptions Trend</h3>
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Exceptions Trend (Last 14 Days)</h3>
                             <div id="chartDailyTrend" class="chart-container"></div>
                         </div>
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Top 10 Current Facility</h3>
-                            <div id="chartFacility" class="chart-container"></div>
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Exception Status Distribution</h3>
+                            <div id="chartStatus" class="chart-container"></div>
                         </div>
                     </div>
                 </div>
@@ -258,29 +258,25 @@
                 <!-- ANALYTICS VIEW -->
                 <div id="view-analytics" class="view-section hidden-view space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="charts-analytics" style="display:none;">
-                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Exception Type Breakdown (Daily)</h3>
-                            <div id="chartTypeTrend" class="chart-container" style="height: 300px;"></div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800 xl:col-span-2">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Trend (Created Time)</h3>
+                            <div id="chartAnalyticsDaily" class="chart-container" style="height: 300px;"></div>
                         </div>
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Aging Bucket Analysis</h3>
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Exception Type Distribution</h3>
+                            <div id="chartTypeDist" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Aging Buckets Analysis</h3>
                             <div id="chartAging" class="chart-container" style="height: 300px;"></div>
                         </div>
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Avg Resp Time by Facility (Hrs)</h3>
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Top Facilities by Exception Count</h3>
+                            <div id="chartFacility" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Avg Response Time by Facility</h3>
                             <div id="chartRespTime" class="chart-container" style="height: 300px;"></div>
-                        </div>
-                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Weekly Trend</h3>
-                            <div id="chartWeekly" class="chart-container" style="height: 300px;"></div>
-                        </div>
-                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">By Source</h3>
-                            <div id="chartSource" class="chart-container" style="height: 300px;"></div>
-                        </div>
-                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
-                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">By Shipment Leg</h3>
-                            <div id="chartLeg" class="chart-container" style="height: 300px;"></div>
                         </div>
                     </div>
                 </div>
@@ -493,6 +489,7 @@
                 els.cacheAlert.classList.add('hidden');
             }
             updateCharts();
+            setTimeout(() => { Object.values(state.charts).forEach(c => { if(c) c.resize(); }); }, 50);
         }
 
         els.navItems.forEach(n => {
@@ -816,11 +813,19 @@
                 applyFiltersAndRender();
             };
 
-            // 1. Daily Trend
+            // ---- DASHBOARD TAB CHARTS ----
+            // 1. Dashboard: Daily Trend (Last 14 days)
             let dChart = getChart('chartDailyTrend');
             if (dChart && state.view === 'dashboard') {
                 let dData = {};
-                data.forEach(x => { let c = getCreated(x); if(c && c !== '-') { let dt = new Date(c * 1000).toISOString().split('T')[0]; dData[dt] = (dData[dt]||0)+1; } });
+                let cutoff = now - (14 * 86400);
+                data.forEach(x => { 
+                    let c = getCreated(x); 
+                    if(c && c !== '-' && c >= cutoff) { 
+                        let dt = new Date(c * 1000).toISOString().split('T')[0]; 
+                        dData[dt] = (dData[dt]||0)+1; 
+                    } 
+                });
                 let sortedD = Object.keys(dData).sort();
                 dChart.setOption({
                     tooltip: { trigger: 'axis', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
@@ -831,54 +836,68 @@
                 }, true);
             }
 
-            // 2. Facility Top 10
-            let fChart = getChart('chartFacility');
-            if (fChart && state.view === 'dashboard') {
-                let fData = data.reduce((acc, curr) => { let f = getFacility(curr); acc[f] = (acc[f]||0)+1; return acc; }, {});
-                let sortedF = Object.entries(fData).sort((a,b) => b[1] - a[1]).slice(0, 10);
-                fChart.setOption({ 
-                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
-                    grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true }, 
-                    yAxis: { type: 'category', data: sortedF.map(x=>x[0]).reverse(), axisLabel: { interval: 0, width: 120, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} }, 
-                    xAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} }, 
-                    series: [{ data: sortedF.map(x=>x[1]).reverse(), type: 'bar', itemStyle: {color: colors[1], borderRadius: [0,4,4,0]} }] 
+            // 2. Dashboard: Status Distribution (Donut)
+            let sChart = getChart('chartStatus');
+            if (sChart && state.view === 'dashboard') {
+                let sData = data.reduce((acc, curr) => { let s = getStatus(curr); acc[s] = (acc[s]||0)+1; return acc; }, {});
+                sChart.setOption({ 
+                    tooltip: { trigger: 'item', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
+                    series: [{ type: 'pie', radius: ['40%', '70%'], data: Object.keys(sData).map(k => ({name: k, value: sData[k]})), itemStyle: { borderRadius: 5, borderColor: '#1a233a', borderWidth: 2 } }], 
+                    color: colors 
                 }, true);
-                fChart.off('click'); fChart.on('click', p => applyFilter('facility', p.name));
+                sChart.off('click'); sChart.on('click', p => applyFilter('status', p.name));
             }
 
-            // 3. Exception Type Trend
-            let tChart = getChart('chartTypeTrend');
-            if (tChart && state.view === 'analytics') {
-                let tData = {}, tTypes = new Set();
-                data.forEach(x => {
-                    let c = getCreated(x), t = getReason(x);
-                    if(c && c !== '-' && t && t !== '-') {
-                        let dt = new Date(c * 1000).toISOString().split('T')[0];
-                        if(!tData[dt]) tData[dt] = {};
-                        tData[dt][t] = (tData[dt][t]||0)+1; tTypes.add(t);
-                    }
+            // ---- ANALYTICS TAB CHARTS ----
+            // 1. Analytics: Daily Trend (All Time)
+            let aDailyChart = getChart('chartAnalyticsDaily');
+            if (aDailyChart && state.view === 'analytics') {
+                let dData = {};
+                data.forEach(x => { 
+                    let c = getCreated(x); 
+                    if(c && c !== '-') { 
+                        let dt = new Date(c * 1000).toISOString().split('T')[0]; 
+                        dData[dt] = (dData[dt]||0)+1; 
+                    } 
                 });
-                let topTypes = Array.from(tTypes).sort((a,b) => Object.values(tData).reduce((s,d)=>s+(d[b]||0),0) - Object.values(tData).reduce((s,d)=>s+(d[a]||0),0)).slice(0, 5);
-                let sortedD = Object.keys(tData).sort();
-                tChart.setOption({
-                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
-                    legend: { data: topTypes, bottom: 0, textStyle: {color: '#9ca3af'} },
-                    grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                let sortedD = Object.keys(dData).sort();
+                aDailyChart.setOption({
+                    tooltip: { trigger: 'axis', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                    grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
                     xAxis: { type: 'category', data: sortedD, axisLine: {lineStyle: {color: '#374151'}} },
                     yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
-                    series: topTypes.map((type, idx) => ({ name: type, type: 'bar', stack: 'total', itemStyle: { color: colors[idx % colors.length] }, data: sortedD.map(dt => tData[dt]?.[type] || 0) }))
+                    series: [{ data: sortedD.map(k=>dData[k]), type: 'bar', itemStyle: {color: colors[0], borderRadius: [4,4,0,0]} }]
                 }, true);
             }
 
-            // 4. Aging Buckets
+            // 2. Analytics: Exception Type Distribution
+            let aTypeChart = getChart('chartTypeDist');
+            if (aTypeChart && state.view === 'analytics') {
+                let tData = data.reduce((acc, curr) => { let t = getReason(curr); if(t !== '-' && t !== 'Unknown') acc[t] = (acc[t]||0)+1; return acc; }, {});
+                let sortedT = Object.entries(tData).sort((a,b) => b[1] - a[1]).slice(0, 15);
+                aTypeChart.setOption({
+                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                    grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
+                    xAxis: { type: 'category', data: sortedT.map(x=>x[0]), axisLabel: { interval: 0, width: 80, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} },
+                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                    series: [{ data: sortedT.map(x=>x[1]), type: 'bar', itemStyle: {color: colors[4], borderRadius: [4,4,0,0]} }]
+                }, true);
+                aTypeChart.off('click'); aTypeChart.on('click', p => applyFilter('type', p.name));
+            }
+
+            // 3. Analytics: Aging Buckets Analysis
             let aChart = getChart('chartAging');
             if (aChart && state.view === 'analytics') {
-                let buckets = {'0-3 days':0, '4-7 days':0, '8-14 days':0, '15-30 days':0, '30+ days':0};
+                let buckets = {'0-1 days':0, '1-3 days':0, '4-7 days':0, '8-14 days':0, '>14 days':0};
                 data.forEach(x => {
                     let c = getCreated(x);
                     if(c && c !== '-') {
                         let days = (now - c) / 86400;
-                        if(days <= 3) buckets['0-3 days']++; else if(days <= 7) buckets['4-7 days']++; else if(days <= 14) buckets['8-14 days']++; else if(days <= 30) buckets['15-30 days']++; else buckets['30+ days']++;
+                        if(days <= 1) buckets['0-1 days']++; 
+                        else if(days <= 3) buckets['1-3 days']++; 
+                        else if(days <= 7) buckets['4-7 days']++; 
+                        else if(days <= 14) buckets['8-14 days']++; 
+                        else buckets['>14 days']++;
                     }
                 });
                 aChart.setOption({
@@ -890,7 +909,22 @@
                 }, true);
             }
 
-            // 5. Avg Resp Time
+            // 4. Analytics: Top Facilities
+            let fChart = getChart('chartFacility');
+            if (fChart && state.view === 'analytics') {
+                let fData = data.reduce((acc, curr) => { let f = getFacility(curr); acc[f] = (acc[f]||0)+1; return acc; }, {});
+                let sortedF = Object.entries(fData).sort((a,b) => b[1] - a[1]).slice(0, 15);
+                fChart.setOption({ 
+                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
+                    grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true }, 
+                    yAxis: { type: 'category', data: sortedF.map(x=>x[0]).reverse(), axisLabel: { interval: 0, width: 120, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} }, 
+                    xAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} }, 
+                    series: [{ data: sortedF.map(x=>x[1]).reverse(), type: 'bar', itemStyle: {color: colors[1], borderRadius: [0,4,4,0]} }] 
+                }, true);
+                fChart.off('click'); fChart.on('click', p => applyFilter('facility', p.name));
+            }
+
+            // 5. Analytics: Avg Resp Time
             let rChart = getChart('chartRespTime');
             if (rChart && state.view === 'analytics') {
                 let fTimes = {};
@@ -911,57 +945,6 @@
                     series: [{ data: avgTimes.map(x=>x[1].toFixed(1)).reverse(), type: 'bar', itemStyle: {color: colors[3], borderRadius: [0,4,4,0]} }]
                 }, true);
                 rChart.off('click'); rChart.on('click', p => applyFilter('facility', p.name));
-            }
-
-            // 6. Weekly Trend
-            let wChart = getChart('chartWeekly');
-            if (wChart && state.view === 'analytics') {
-                let wData = {};
-                data.forEach(x => {
-                    let c = getCreated(x);
-                    if(c && c !== '-') {
-                        let dObj = new Date(c * 1000);
-                        dObj.setUTCDate(dObj.getUTCDate() + 4 - (dObj.getUTCDay()||7));
-                        let yearStart = new Date(Date.UTC(dObj.getUTCFullYear(),0,1));
-                        let weekNo = Math.ceil(( ( (dObj - yearStart) / 86400000) + 1)/7);
-                        let wKey = `${dObj.getUTCFullYear()}-W${weekNo.toString().padStart(2,'0')}`;
-                        wData[wKey] = (wData[wKey]||0)+1;
-                    }
-                });
-                let sortedW = Object.keys(wData).sort();
-                wChart.setOption({
-                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
-                    grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
-                    xAxis: { type: 'category', data: sortedW, axisLine: {lineStyle: {color: '#374151'}} },
-                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
-                    series: [{ data: sortedW.map(k=>wData[k]), type: 'bar', itemStyle: {color: colors[4], borderRadius: [4,4,0,0]} }]
-                }, true);
-            }
-            
-            // 7. Source
-            let sChart = getChart('chartSource');
-            if (sChart && state.view === 'analytics') {
-                let sData = data.reduce((acc, curr) => { let s = getSource(curr); acc[s] = (acc[s]||0)+1; return acc; }, {});
-                sChart.setOption({ 
-                    tooltip: { trigger: 'item', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
-                    series: [{ type: 'pie', radius: ['40%', '70%'], data: Object.keys(sData).map(k => ({name: k, value: sData[k]})), itemStyle: { borderRadius: 5, borderColor: '#1a233a', borderWidth: 2 } }], 
-                    color: colors 
-                }, true);
-                sChart.off('click'); sChart.on('click', p => applyFilter('source', p.name));
-            }
-            
-            // 8. Leg
-            let lChart = getChart('chartLeg');
-            if (lChart && state.view === 'analytics') {
-                let lData = data.reduce((acc, curr) => { let l = getLeg(curr); acc[l] = (acc[l]||0)+1; return acc; }, {});
-                let sortedL = Object.entries(lData).sort((a,b) => b[1] - a[1]);
-                lChart.setOption({ 
-                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
-                    grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
-                    xAxis: { type: 'category', data: sortedL.map(x=>x[0]), axisLabel: { interval: 0, width: 80, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} }, 
-                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} }, 
-                    series: [{ data: sortedL.map(x=>x[1]), type: 'bar', itemStyle: {color: colors[5], borderRadius: [4,4,0,0]} }] 
-                }, true);
             }
         }
         
