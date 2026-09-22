@@ -866,11 +866,12 @@
                 html += `<div class="px-3 py-4 text-center text-sm text-gray-500">No options available</div>`;
             } else {
                 optionsArr.forEach(opt => {
-                    let checked = selectedArr.includes(opt) ? 'checked' : '';
+                    const optStr = String(opt == null ? '' : opt);
+                    let checked = selectedArr.includes(optStr) ? 'checked' : '';
                     html += `
                         <label class="flex items-center px-3 py-1.5 hover:bg-gray-700 cursor-pointer transition">
-                            <input type="checkbox" value="${opt.replace(/"/g, '&quot;')}" ${checked} class="ms-cb h-4 w-4 text-cyan-500 bg-gray-900 border-gray-600 rounded mr-3 focus:ring-cyan-500 focus:ring-offset-gray-800">
-                            <span class="text-sm text-gray-200 truncate" title="${opt.replace(/"/g, '&quot;')}">${opt}</span>
+                            <input type="checkbox" value="${optStr.replace(/"/g, '&quot;')}" ${checked} class="ms-cb h-4 w-4 text-cyan-500 bg-gray-900 border-gray-600 rounded mr-3 focus:ring-cyan-500 focus:ring-offset-gray-800">
+                            <span class="text-sm text-gray-200 truncate" title="${optStr.replace(/"/g, '&quot;')}">${optStr || '(empty)'}</span>
                         </label>`;
                 });
             }
