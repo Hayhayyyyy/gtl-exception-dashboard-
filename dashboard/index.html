@@ -108,7 +108,7 @@
                     </div>
 
                     <!-- KPI Grid -->
-                    <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
+                    <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4">
                         <div class="bg-navy-800 rounded-xl p-4 border border-gray-800 shadow-lg flex flex-col justify-center">
                             <div class="text-gray-400 text-xs font-medium mb-1 uppercase tracking-wider">Loaded</div>
                             <div id="kpi-total" class="text-2xl font-bold text-gray-100">0</div>
@@ -144,6 +144,11 @@
                         <div class="bg-navy-800 rounded-xl p-4 border border-cyan-900/50 shadow-lg flex flex-col justify-center">
                             <div class="text-cyan-400 text-xs font-medium mb-1 uppercase tracking-wider">Feedback Submitted</div>
                             <div id="kpi-closed" class="text-2xl font-bold text-cyan-400">0</div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-orange-900/50 shadow-[0_0_15px_rgba(249,115,22,0.05)] flex flex-col justify-center relative overflow-hidden">
+                            <div class="absolute -right-2 -bottom-2 opacity-10 text-orange-500"><i class="fa-solid fa-box-open text-5xl"></i></div>
+                            <div class="text-orange-400 text-xs font-medium mb-1 uppercase tracking-wider relative z-10">DBNR Cases</div>
+                            <div id="kpi-dbnr" class="text-2xl font-bold text-orange-400 relative z-10">0</div>
                         </div>
                     </div>
 
@@ -261,6 +266,19 @@
                 <!-- ANALYTICS VIEW -->
                 <div id="view-analytics" class="view-section hidden-view space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="charts-analytics" style="display:none;">
+                        <!-- Top Row: DBNR and Delivery Type -->
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider text-orange-400">DBNR Daily Trend</h3>
+                            <div id="chartDbnrTrend" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800 xl:col-span-2">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Exception Type × Delivery Type Distribution</h3>
+                            <div id="chartExcDelivery" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800 xl:col-span-3">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Facility Performance (Exception Count by Hub)</h3>
+                            <div id="chartHubPerf" class="chart-container" style="height: 350px;"></div>
+                        </div>
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800 xl:col-span-2">
                             <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Trend (Created Time)</h3>
                             <div id="chartAnalyticsDaily" class="chart-container" style="height: 300px;"></div>
@@ -295,6 +313,14 @@
                         <div class="p-6 space-y-6">
                             <div>
                                 <h4 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-gray-700 pb-2">Server-Side Filters</h4>
+                                <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 mb-6">
+                                    <h5 class="text-sm font-bold text-cyan-400 mb-3"><i class="fa-solid fa-book mr-2"></i>Code Reference</h5>
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-400">
+                                        <div><strong class="text-gray-200">Status Codes:</strong><ul class="mt-1 space-y-1"><li>100 = Over SLA</li><li>200 = Waiting Feedback</li><li>300 = Feedback Submitted</li></ul></div>
+                                        <div><strong class="text-gray-200">Priority Codes:</strong><ul class="mt-1 space-y-1"><li>100 = P1</li><li>P0 = Highest Priority (TTS_Ticket, DBNR)</li></ul></div>
+                                        <div><strong class="text-gray-200">Exception Types:</strong><ul class="mt-1 space-y-1"><li>100 = Time Issue</li><li>200 = Status Issue</li><li>DBNR = Delivered But Not Received</li></ul></div>
+                                    </div>
+                                </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div>
                                         <label class="block text-sm font-medium text-gray-400 mb-1">Time Range (Last N Days)</label>
@@ -303,6 +329,7 @@
                                     <div>
                                         <label class="block text-sm font-medium text-gray-400 mb-1">Priority Codes</label>
                                         <input type="text" id="set-priority" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition">
+                                        <p class="text-[10px] text-gray-500 mt-1">Leave empty to fetch all</p>
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-400 mb-1">Status Codes</label>
@@ -311,6 +338,7 @@
                                     <div>
                                         <label class="block text-sm font-medium text-gray-400 mb-1">Exception Type Codes</label>
                                         <input type="text" id="set-type" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition">
+                                        <p class="text-[10px] text-gray-500 mt-1">Leave empty to fetch all</p>
                                     </div>
                                 </div>
                             </div>
@@ -458,6 +486,7 @@
             kpiWait: document.getElementById('kpi-wait'),
             kpiSubmit: document.getElementById('kpi-submit'),
             kpiAvgAge: document.getElementById('kpi-avgage'),
+            kpiDbnr: document.getElementById('kpi-dbnr'),
             kpiAging7: document.getElementById('kpi-aging7'),
             kpiAging14: document.getElementById('kpi-aging14'),
             kpiClosed: document.getElementById('kpi-closed'),
@@ -585,7 +614,16 @@
             if(f.status.length > 0) d = d.filter(x => f.status.includes(getStatus(x)));
             if(f.priority.length > 0) d = d.filter(x => f.priority.includes(getPriority(x)));
             if(f.source.length > 0) d = d.filter(x => f.source.includes(getSource(x)));
-            if(f.type.length > 0) d = d.filter(x => f.type.includes(getReason(x)));
+            if(f.type.length > 0) {
+                let wantsDbnr = f.type.includes('DBNR');
+                let normalTypes = f.type.filter(t => t !== 'DBNR');
+                d = d.filter(x => {
+                    let isDbnr = getSource(x) === 'TTS_Ticket' || String(getReason(x)).toLowerCase().includes('delivered but not received');
+                    if (wantsDbnr && isDbnr) return true;
+                    if (normalTypes.length > 0 && normalTypes.includes(getReason(x))) return true;
+                    return false;
+                });
+            }
             if(f.facility.length > 0) d = d.filter(x => f.facility.includes(getFacility(x)));
             
             if(f.startDate) {
@@ -707,6 +745,9 @@
             els.kpiAvgAge.innerText = validAges > 0 ? (totalAgeDays / validAges).toFixed(1) : '0';
             els.kpiAging7.innerText = aging7;
             els.kpiAging14.innerText = aging14;
+            
+            let dbnrCount = d.filter(x => getSource(x) === 'TTS_Ticket' || String(getReason(x)).toLowerCase().includes('delivered but not received')).length;
+            if (els.kpiDbnr) els.kpiDbnr.innerText = dbnrCount;
 
             if (d.length > 0) {
                 els.insightsBanner.classList.remove('hidden');
@@ -796,7 +837,9 @@
             createMultiSelect('filter-status', 'Status', Array.from(opts.status).sort(), 'status');
             createMultiSelect('filter-priority', 'Priority', Array.from(opts.priority).sort(), 'priority');
             createMultiSelect('filter-source', 'Source', Array.from(opts.source).sort(), 'source');
-            createMultiSelect('filter-type', 'Type / Reason', Array.from(opts.type).sort(), 'type');
+            let typeArr = Array.from(opts.type).sort();
+            if (!typeArr.includes('DBNR')) typeArr.unshift('DBNR');
+            createMultiSelect('filter-type', 'Type / Reason', typeArr, 'type');
             createMultiSelect('filter-facility', 'Facility', Array.from(opts.facility).sort(), 'facility');
         }
 
@@ -948,6 +991,100 @@
                     series: [{ data: sortedF.map(x=>x[1]).reverse(), type: 'bar', itemStyle: {color: colors[1], borderRadius: [0,4,4,0]} }] 
                 }, true);
                 fChart.off('click'); fChart.on('click', p => applyFilter('facility', p.name));
+            }
+
+            // --- NEW ANALYTICS CHARTS ---
+            // 6. Analytics: DBNR Daily Trend
+            let cDbnr = getChart('chartDbnrTrend');
+            if (cDbnr && state.view === 'view-analytics') {
+                let dData = {};
+                data.forEach(x => { 
+                    if (getSource(x) === 'TTS_Ticket' || String(getReason(x)).toLowerCase().includes('delivered but not received')) {
+                        let c = getCreated(x); 
+                        if(c && c !== '-') { 
+                            let dt = new Date(c * 1000).toISOString().split('T')[0]; 
+                            dData[dt] = (dData[dt]||0)+1; 
+                        }
+                    }
+                });
+                let sortedD = Object.keys(dData).sort();
+                cDbnr.setOption({
+                    tooltip: { trigger: 'axis', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                    grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
+                    xAxis: { type: 'category', data: sortedD, axisLine: {lineStyle: {color: '#374151'}} },
+                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                    series: [{ data: sortedD.map(k=>dData[k]), type: 'line', smooth: true, areaStyle: {opacity: 0.1}, itemStyle: {color: '#f97316'}, symbolSize: 6 }]
+                }, true);
+            }
+
+            // 7. Analytics: Exception Type x Delivery Type
+            let cExcDel = getChart('chartExcDelivery');
+            if (cExcDel && state.view === 'view-analytics') {
+                let delTypes = new Set();
+                let excDelData = {};
+                data.forEach(x => {
+                    let et = getReason(x);
+                    let del = x.delivery_type || 'Unknown';
+                    if (et !== 'Unknown' && et !== '-') {
+                        if (!excDelData[et]) excDelData[et] = {};
+                        excDelData[et][del] = (excDelData[et][del]||0)+1;
+                        delTypes.add(del);
+                    }
+                });
+                let topEt = Object.keys(excDelData).sort((a,b) => {
+                    return Object.values(excDelData[b]).reduce((s,v)=>s+v,0) - Object.values(excDelData[a]).reduce((s,v)=>s+v,0);
+                }).slice(0, 10);
+                let delArr = Array.from(delTypes);
+                
+                let series = delArr.map((dType, idx) => ({
+                    name: dType, type: 'bar', stack: 'total',
+                    itemStyle: { color: colors[idx % colors.length] },
+                    data: topEt.map(et => excDelData[et][dType] || 0)
+                }));
+                
+                cExcDel.setOption({
+                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                    legend: { data: delArr, bottom: 0, textStyle: {color: '#9ca3af'} },
+                    grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                    xAxis: { type: 'category', data: topEt, axisLabel: { interval: 0, width: 90, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} },
+                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                    series: series
+                }, true);
+            }
+
+            // 8. Analytics: Hub Historical Performance (Stacked by Status)
+            let cHubPerf = getChart('chartHubPerf');
+            if (cHubPerf && state.view === 'view-analytics') {
+                let hData = {};
+                data.forEach(x => {
+                    let f = getFacility(x);
+                    let s = getStatus(x);
+                    if(f !== 'Unknown' && f !== '-') {
+                        if(!hData[f]) hData[f] = {'Over SLA':0, 'Waiting Feedback':0, 'Feedback Submitted':0, 'Other':0};
+                        if (['Over SLA', 'Waiting Feedback', 'Feedback Submitted'].includes(s)) {
+                            hData[f][s]++;
+                        } else {
+                            hData[f]['Other']++;
+                        }
+                    }
+                });
+                let topHubs = Object.keys(hData).sort((a,b) => {
+                    return Object.values(hData[b]).reduce((s,v)=>s+v,0) - Object.values(hData[a]).reduce((s,v)=>s+v,0);
+                }).slice(0, 20);
+                
+                cHubPerf.setOption({
+                    tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                    legend: { data: ['Over SLA', 'Waiting Feedback', 'Feedback Submitted', 'Other'], bottom: 0, textStyle: {color: '#9ca3af'} },
+                    grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                    xAxis: { type: 'category', data: topHubs, axisLabel: { interval: 0, rotate: 30, width: 100, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} },
+                    yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                    series: [
+                        { name: 'Over SLA', type: 'bar', stack: 'total', itemStyle: {color: '#f43f5e'}, data: topHubs.map(h => hData[h]['Over SLA']) },
+                        { name: 'Waiting Feedback', type: 'bar', stack: 'total', itemStyle: {color: '#f59e0b'}, data: topHubs.map(h => hData[h]['Waiting Feedback']) },
+                        { name: 'Feedback Submitted', type: 'bar', stack: 'total', itemStyle: {color: '#22d3ee'}, data: topHubs.map(h => hData[h]['Feedback Submitted']) },
+                        { name: 'Other', type: 'bar', stack: 'total', itemStyle: {color: '#6b7280'}, data: topHubs.map(h => hData[h]['Other']) }
+                    ]
+                }, true);
             }
 
             // 5. Analytics: Avg Resp Time
@@ -1130,6 +1267,9 @@
                 console.log('Total TTS_Ticket records:', ttsRecords);
                 console.groupEnd();
                 // ---------------------------------
+                
+                let cacheHint = document.getElementById('cache-sync-hint');
+                if (cacheHint) cacheHint.classList.add('hidden');
                 
                 await saveToCache();
                 applyFiltersAndRender();
@@ -1319,6 +1459,12 @@
                         els.cacheAlert.classList.remove('hidden');
                         
                         if (Date.now() - meta.timestamp > 6 * 3600 * 1000) els.cacheWarning.classList.remove('hidden');
+                        
+                        // Show sync hint if cached records look like they used old filters
+                        if (meta.total > 0) {
+                            let cacheHint = document.getElementById('cache-sync-hint');
+                            if (cacheHint) cacheHint.classList.remove('hidden');
+                        }
                         
                         applyFiltersAndRender();
                     }
