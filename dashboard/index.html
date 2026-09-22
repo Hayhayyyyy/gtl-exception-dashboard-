@@ -169,12 +169,26 @@
                 <!-- TABLE VIEW -->
                 <div id="view-table" class="view-section hidden-view flex flex-col space-y-4 h-full">
                     <!-- Filters bar -->
-                    <div class="bg-navy-800 border border-gray-800 p-5 rounded-xl shadow-lg flex flex-wrap gap-4 items-end shrink-0">
-                        <div id="filter-status"></div>
-                        <div id="filter-priority"></div>
-                        <div id="filter-source"></div>
-                        <div id="filter-type"></div>
-                        <div id="filter-facility"></div>
+                    <div class="bg-navy-800 border border-gray-800 p-5 rounded-xl shadow-lg flex flex-col gap-4 shrink-0">
+                        
+                        <!-- Global Search -->
+                        <div class="relative w-full">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500"></i>
+                            <input type="text" id="filter-search" class="w-full bg-gray-900 border border-gray-700 rounded-md pl-10 pr-10 py-2 text-sm text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition placeholder-gray-500" placeholder="Search... (use comma to search multiple values, e.g: AWB001, AWB002)">
+                            <button id="btn-clear-search" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-red-400 hidden"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                        
+                        <div class="flex flex-wrap gap-4 items-end w-full">
+                            <div id="filter-status"></div>
+                            <div id="filter-priority"></div>
+                            <div id="filter-source"></div>
+                            <div id="filter-type"></div>
+                            <div id="filter-facility"></div>
+                            <div id="filter-packagestatus"></div>
+                            <div id="filter-leg"></div>
+                            <div id="filter-delivery"></div>
+                            <div id="filter-service"></div>
+                            <div id="filter-ruleid"></div>
                         
                         <div>
                             <label class="block text-xs font-medium text-gray-400 mb-1">Start Date (Created)</label>
@@ -407,7 +421,7 @@
             db: null,
             refreshTimer: null,
             charts: {},
-            filters: { status: [], priority: [], source: [], type: [], facility: [], startDate: '', endDate: '' },
+            filters: { status: [], priority: [], source: [], type: [], facility: [], packageStatus: [], leg: [], delivery: [], service: [], ruleId: [], search: '', startDate: '', endDate: '' },
             settings: {
                 autoRefresh: true,
                 refreshInterval: 5,
@@ -449,7 +463,11 @@
         };
         const getSource = r => getVal(r, ['source', 'exception_source']) || 'Unknown';
         const getFacility = r => getVal(r, ['assigned_facility', 'current_facility', 'facility']) || 'Unknown';
+        const getPackageStatus = r => getVal(r, ['package_status']) || 'Unknown';
         const getLeg = r => getVal(r, ['shipment_leg_type', 'shipment_leg', 'leg']) || 'Unknown';
+        const getDelivery = r => getVal(r, ['delivery_type']) || 'Unknown';
+        const getService = r => getVal(r, ['service_type']) || 'Unknown';
+        const getRuleId = r => String(getVal(r, ['exception_rule_id', 'rule_id']) || 'Unknown');
         const getSLA = r => { let s = String(getVal(r, ['is_sla_breach', 'is_sla_breached', 'processing_sla', 'sla', 'sla_status']) || '').toLowerCase(); return s.includes('breach') || s.includes('over') || s.includes('timeout') || s === 'true' || s === '1' || s === 'yes'; };
         const getCreated = r => {
             let v = getVal(r, ['exception_created_time', 'exception_created_at', 'create_time', 'created_at', 'creation_time', 'created_time']);
@@ -656,13 +674,34 @@
                 let normalTypes = f.type.filter(t => t !== 'DBNR');
                 d = d.filter(x => {
                     let r = getReason(x);
-                    let isDbnr = r === 'DBNR' || getSource(x) === 'TTS_Ticket';
+                    let isDbnr = r === 'DBNR';
                     if (wantsDbnr && isDbnr) return true;
                     if (normalTypes.length > 0 && normalTypes.includes(r)) return true;
                     return false;
                 });
             }
             if(f.facility.length > 0) d = d.filter(x => f.facility.includes(getFacility(x)));
+            if(f.packageStatus.length > 0) d = d.filter(x => f.packageStatus.includes(getPackageStatus(x)));
+            if(f.leg.length > 0) d = d.filter(x => f.leg.includes(getLeg(x)));
+            if(f.delivery.length > 0) d = d.filter(x => f.delivery.includes(getDelivery(x)));
+            if(f.service.length > 0) d = d.filter(x => f.service.includes(getService(x)));
+            if(f.ruleId.length > 0) d = d.filter(x => f.ruleId.includes(getRuleId(x)));
+            
+            // Search Filter
+            if (f.search && f.search.trim().length > 0) {
+                let terms = f.search.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+                if (terms.length > 0) {
+                    d = d.filter(x => {
+                        let textBlock = [
+                            x.exception_id, x.exception_no, getTracking(x), x.tts_ticket_id, 
+                            x.assignee, x.client, x.task_no
+                        ].filter(Boolean).map(v => String(v).toLowerCase()).join(' | ');
+                        
+                        // match if ANY term exists in textBlock
+                        return terms.some(term => textBlock.includes(term));
+                    });
+                }
+            }
             
             if(f.startDate) {
                 let st = new Date(f.startDate + "T00:00:00").getTime() / 1000;
@@ -784,7 +823,7 @@
             els.kpiAging7.innerText = aging7;
             els.kpiAging14.innerText = aging14;
             
-            let dbnrCount = d.filter(x => getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR').length;
+            let dbnrCount = d.filter(x => getReason(x) === 'DBNR').length;
             if (els.kpiDbnr) els.kpiDbnr.innerText = dbnrCount;
 
             if (d.length > 0) {
@@ -864,13 +903,18 @@
         }
 
         function updateDropdownOptions() {
-            let opts = { status: new Set(), priority: new Set(), source: new Set(), type: new Set(), facility: new Set() };
+            let opts = { status: new Set(), priority: new Set(), source: new Set(), type: new Set(), facility: new Set(), packageStatus: new Set(), leg: new Set(), delivery: new Set(), service: new Set(), ruleId: new Set() };
             state.rawData.forEach(x => {
                 let s = getStatus(x); if(s !== 'Unknown') opts.status.add(s);
                 let p = getPriority(x); if(p !== 'Unknown') opts.priority.add(p);
                 let src = getSource(x); if(src !== 'Unknown') opts.source.add(src);
                 let t = getReason(x); if(t !== '-' && t !== 'Unknown') opts.type.add(t);
                 let f = getFacility(x); if(f !== 'Unknown') opts.facility.add(f);
+                let ps = getPackageStatus(x); if(ps !== 'Unknown') opts.packageStatus.add(ps);
+                let l = getLeg(x); if(l !== 'Unknown') opts.leg.add(l);
+                let dt = getDelivery(x); if(dt !== 'Unknown') opts.delivery.add(dt);
+                let st = getService(x); if(st !== 'Unknown') opts.service.add(st);
+                let ri = getRuleId(x); if(ri !== 'Unknown') opts.ruleId.add(ri);
             });
             createMultiSelect('filter-status', 'Status', Array.from(opts.status).sort(), 'status');
             createMultiSelect('filter-priority', 'Priority', Array.from(opts.priority).sort(), 'priority');
@@ -879,6 +923,11 @@
             if (!typeArr.includes('DBNR')) typeArr.unshift('DBNR');
             createMultiSelect('filter-type', 'Type / Reason', typeArr, 'type');
             createMultiSelect('filter-facility', 'Facility', Array.from(opts.facility).sort(), 'facility');
+            createMultiSelect('filter-packagestatus', 'Package Status', Array.from(opts.packageStatus).sort(), 'packageStatus');
+            createMultiSelect('filter-leg', 'Shipment Leg Type', Array.from(opts.leg).sort(), 'leg');
+            createMultiSelect('filter-delivery', 'Delivery Type', Array.from(opts.delivery).sort(), 'delivery');
+            createMultiSelect('filter-service', 'Service Type', Array.from(opts.service).sort(), 'service');
+            createMultiSelect('filter-ruleid', 'Exception Rule ID', Array.from(opts.ruleId).sort(), 'ruleId');
         }
 
         document.addEventListener('click', (e) => {
@@ -1040,7 +1089,7 @@
             if (cDbnr && state.view === 'view-analytics') {
                 let dData = {};
                 data.forEach(x => { 
-                    if (getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR') {
+                    if (getReason(x) === 'DBNR') {
                         let c = getCreated(x); 
                         if(c && c !== '-') { 
                             let dt = new Date(c * 1000).toISOString().split('T')[0]; 
@@ -1132,7 +1181,7 @@
             let cDbnrFac = getChart('chartDbnrFacility');
             let top5DbnrHubs = [];
             if (cDbnrFac && state.view === 'view-analytics') {
-                let dbnrData = data.filter(x => getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR');
+                let dbnrData = data.filter(x => getReason(x) === 'DBNR');
                 let fData = {};
                 dbnrData.forEach(x => {
                     let f = getFacility(x);
@@ -1173,7 +1222,7 @@
                 let dates = new Set();
                 top5DbnrHubs.forEach(h => seriesData[h] = {});
                 
-                let dbnrData = data.filter(x => getSource(x) === 'TTS_Ticket' || getReason(x) === 'DBNR');
+                let dbnrData = data.filter(x => getReason(x) === 'DBNR');
                 dbnrData.forEach(x => {
                     let f = getFacility(x);
                     if (top5DbnrHubs.includes(f)) {
@@ -1420,15 +1469,41 @@
                 alert("No DBNR records found in currently loaded data. Ensure exception filters are clear and data is fetched.");
                 return;
             }
-            state.filters = { status: [], priority: [], source: [], type: dbnrTypes, facility: [], startDate: '', endDate: '' };
+            state.filters = { status: [], priority: [], source: [], type: dbnrTypes, facility: [], packageStatus: [], leg: [], delivery: [], service: [], ruleId: [], search: state.filters.search, startDate: '', endDate: '' };
             els.filterStart.value = '';
             els.filterEnd.value = '';
             state.page = 1;
             applyFiltersAndRender();
         });
 
+                
+        let searchBox = document.getElementById('filter-search');
+        let searchClearBtn = document.getElementById('btn-clear-search');
+        
+        let searchDebounceTimeout = null;
+        if(searchBox) searchBox.addEventListener('input', (e) => {
+            clearTimeout(searchDebounceTimeout);
+            if(e.target.value.trim().length > 0) searchClearBtn.classList.remove('hidden');
+            else searchClearBtn.classList.add('hidden');
+            searchDebounceTimeout = setTimeout(() => {
+                state.filters.search = e.target.value;
+                state.page = 1;
+                applyFiltersAndRender();
+            }, 300);
+        });
+        
+        if(searchClearBtn) searchClearBtn.addEventListener('click', () => {
+            searchBox.value = '';
+            searchClearBtn.classList.add('hidden');
+            state.filters.search = '';
+            state.page = 1;
+            applyFiltersAndRender();
+        });
+
         els.btnClearFilters.addEventListener('click', () => {
-            state.filters = { status: [], priority: [], source: [], type: [], facility: [], startDate: '', endDate: '' };
+            state.filters = { status: [], priority: [], source: [], type: [], facility: [], packageStatus: [], leg: [], delivery: [], service: [], ruleId: [], search: '', startDate: '', endDate: '' };
+            if(searchBox) { searchBox.value = ''; searchClearBtn.classList.add('hidden'); }
+
             els.filterStart.value = '';
             els.filterEnd.value = '';
             state.page = 1;
