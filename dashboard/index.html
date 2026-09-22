@@ -389,10 +389,14 @@
         const getSource = r => getVal(r, ['source', 'exception_source']) || 'Unknown';
         const getFacility = r => getVal(r, ['assigned_facility', 'current_facility', 'facility']) || 'Unknown';
         const getLeg = r => getVal(r, ['shipment_leg_type', 'shipment_leg', 'leg']) || 'Unknown';
-        const getSLA = r => { let s = String(getVal(r, ['processing_sla', 'sla']) || '').toLowerCase(); return s.includes('breach') || s.includes('over') || s.includes('timeout') || s === 'true' || s === '1'; };
+        const getSLA = r => { let s = String(getVal(r, ['is_sla_breach', 'is_sla_breached', 'processing_sla', 'sla', 'sla_status']) || '').toLowerCase(); return s.includes('breach') || s.includes('over') || s.includes('timeout') || s === 'true' || s === '1' || s === 'yes'; };
         const getCreated = r => {
-            let v = getVal(r, ['exception_created_at', 'create_time', 'created_at', 'exception_create_time', 'creation_time', 'created_time']);
+            let v = getVal(r, ['exception_created_time', 'exception_created_at', 'create_time', 'created_at', 'creation_time', 'created_time']);
             if(!v) return '-';
+            if(typeof v === 'string') {
+                let d = new Date(v);
+                if(!isNaN(d.getTime())) return Math.floor(d.getTime() / 1000);
+            }
             if(String(v).length === 13) return Math.floor(v/1000);
             return v;
         };
@@ -1025,18 +1029,13 @@
             showError(null);
             els.cacheAlert.classList.add('hidden');
             let currentPage = 1;
+            let totalPages = 1;
             let filters = getServerFilters();
             
             setLoading(true, 'Initializing fetch...');
             try {
                 let initial = await retryFetch(`search?page=1&page_size=10${filters}`);
                 window._lastResp = initial;
-                console.log('Parsing response, keys:', Object.keys(initial));
-                console.log('Full response.data:', JSON.stringify(initial.data || {}).substring(0, 500));
-                console.log('response.data keys:', Object.keys(initial.data || {}));
-                if (initial.data && initial.data.data) {
-                    console.log('response.data.data keys:', Object.keys(initial.data.data));
-                }
                 
                 try {
                     let baseResp = (initial.data && initial.data.base_resp) || initial.base_resp || {};
@@ -1044,29 +1043,34 @@
                         throw new Error(baseResp.message || baseResp.status_message || 'API Error');
                     }
                     
-                    const innerData = (initial.data && initial.data.data) ? initial.data.data : (initial.data || initial || {});
-                    const records = innerData.list || innerData.items || innerData.exceptions || innerData.ehc_data || [];
-                    state.totalRecords = innerData.total || innerData.total_count || (initial.pagination ? initial.pagination.total_data : 0) || records.length;
+                    // The confirmed structure is response.data.ehc_data and response.data.pagination
+                    let dataObj = initial.data || {};
+                    let pagination = dataObj.pagination || {};
+                    console.log('Pagination:', JSON.stringify(pagination));
                     
+                    state.totalRecords = pagination.total || pagination.total_count || pagination.total_data || 0;
+                    totalPages = pagination.total_pages || (state.totalRecords ? Math.ceil(state.totalRecords / 1000) : 1);
+                    
+                    if (!state.totalRecords && dataObj.ehc_data) {
+                        state.totalRecords = dataObj.ehc_data.length;
+                    }
                 } catch (parseErr) {
                     console.error("Error during initial parsing:", parseErr);
                     throw parseErr;
                 }
                 
                 state.rawData = [];
-                let safetyCap = 2000; // max pages to avoid infinite loop
+                let safetyCap = 2000;
                 
-                while (currentPage <= safetyCap) {
-                    setLoading(true, `Loading page ${currentPage} ... (${state.rawData.length} records)`);
+                while (currentPage <= totalPages && currentPage <= safetyCap) {
+                    setLoading(true, `Loading page ${currentPage} of ${totalPages} ... (${state.rawData.length} records)`);
                     let res = await retryFetch(`search?page=${currentPage}&page_size=1000${filters}`);
                     window._lastRespPage = res;
-                    console.log(`Parsing response for page ${currentPage}, keys:`, Object.keys(res));
-                    console.log(`Full response.data page ${currentPage}:`, JSON.stringify(res.data || {}).substring(0, 500));
                     
                     let arr = [];
                     try {
-                        const innerResData = (res.data && res.data.data) ? res.data.data : (res.data || res || {});
-                        arr = innerResData.list || innerResData.items || innerResData.exceptions || innerResData.ehc_data || [];
+                        let dataObj = res.data || {};
+                        arr = dataObj.ehc_data || [];
                     } catch (parseErr) {
                         console.error(`Error parsing page ${currentPage}:`, parseErr);
                         throw parseErr;
@@ -1079,7 +1083,12 @@
                     
                     state.rawData = state.rawData.concat(arr);
                     
-                    if (state.totalRecords && state.rawData.length >= state.totalRecords) break;
+                    let resPagination = (res.data || {}).pagination || {};
+                    if (resPagination.total_pages) {
+                        totalPages = resPagination.total_pages;
+                    }
+                    
+                    if (state.totalRecords && state.rawData.length >= state.totalRecords && currentPage >= totalPages) break;
                     currentPage++;
                 }
                 
