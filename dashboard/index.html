@@ -1529,28 +1529,37 @@
             
             document.getElementById('set-days').value = state.settings.defaultDays;
             document.getElementById('set-status').value = state.settings.status;
+            document.getElementById('set-priority').value = state.settings.priority || '';
+            document.getElementById('set-type').value = state.settings.exceptionType || '';
             document.getElementById('set-exclude').checked = state.settings.excludeTestAWB;
             document.getElementById('set-auto-refresh').checked = state.settings.autoRefresh;
             document.getElementById('set-interval').value = state.settings.refreshInterval;
 
             setupAutoRefresh();
 
-            // Extension handshake
-            document.addEventListener('gtl-extension-ready', () => { console.log('gtl-extension-ready event fired'); markExtActive(); });
+            // Extension handshake — listen first, then PING
+            // The content script fires 'gtl-extension-ready' on document at inject time.
+            // Because this init runs after DOMContentLoaded (async), the event may already
+            // have fired, so we rely primarily on the PING/PONG loop.
+            document.addEventListener('gtl-extension-ready', () => { 
+                console.log('gtl-extension-ready event fired'); 
+                markExtActive(); 
+            });
             window.addEventListener('message', (e) => { 
                 if (e.data && e.data.source === 'GTL_EXTENSION' && e.data.type === 'PONG') {
                     console.log('PONG received from extension');
                     markExtActive(); 
                 }
             });
+            // PING loop: runs for up to 30 seconds (60 × 500ms) to catch late extension injection
             let pingCount = 0;
             let pinger = setInterval(() => {
                 if (!state.extInstalled) {
-                    console.log('Sending PING to extension...');
+                    console.log(`Sending PING to extension (attempt ${pingCount + 1})...`);
                     window.postMessage({ type: 'PING' }, '*');
                 }
                 pingCount++;
-                if (state.extInstalled || pingCount > 40) clearInterval(pinger);
+                if (state.extInstalled || pingCount > 60) clearInterval(pinger);
             }, 500);
 
             // DB
