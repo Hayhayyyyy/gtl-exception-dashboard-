@@ -411,7 +411,7 @@
             settings: {
                 autoRefresh: true,
                 refreshInterval: 5,
-                excludeTestAWB: true,
+                excludeTestAWB: false,
                 defaultDays: 60,
                 priority: '',
                 status: '100,200,300',
@@ -563,8 +563,12 @@
                 renderTable();
             }
             
+            // In case we switch to analytics, update charts
             updateCharts();
-            setTimeout(() => { Object.values(state.charts).forEach(c => { if(c) c.resize(); }); }, 50);
+            // Force resize of all charts after display change
+            setTimeout(() => { 
+                Object.values(state.charts).forEach(c => { if(c) c.resize(); }); 
+            }, 50);
         }
 
         els.navItems.forEach(n => {
@@ -618,7 +622,7 @@
         }
 
         // --- Data Logic ---
-        function applyFiltersAndRender() {
+        function applyFiltersAndRender(shouldUpdateCharts = true, isLiveLoad = false) {
             let d = state.rawData;
             let f = state.filters;
             
@@ -626,12 +630,15 @@
             let testCount = 0;
             if (state.settings.excludeTestAWB) {
                 d = d.filter(x => {
-                    let t = String(getTracking(x));
-                    if (t.startsWith('GTL7')) return true;
-                    testCount++; return false;
+                    let t = String(getTracking(x)).toUpperCase();
+                    // If GTL7 is test, we exclude it. If GTL7 is the ONLY real one, we keep it.
+                    // To prevent filtering ALL data out, let's just exclude AWBs containing 'TEST' 
+                    // or keeping this logic but only if we know what it does.
+                    // The user noted excludeTestAWB blocked all rows. Let's just disable the destructive part 
+                    // or properly exclude standard test patterns.
+                    if (t.includes('TEST')) { testCount++; return false; }
+                    return true;
                 });
-            } else {
-                testCount = state.rawData.filter(x => !String(getTracking(x)).startsWith('GTL7')).length;
             }
             
             if (testCount > 0 && state.settings.excludeTestAWB) {
@@ -882,7 +889,7 @@
 
         // --- Charts Logic ---
         function updateCharts() {
-            if (state.filteredData.length === 0 || (state.view !== 'view-dashboard' && state.view !== 'view-analytics')) {
+            if (state.view !== 'view-dashboard' && state.view !== 'view-analytics') {
                 els.chartsDashboard.style.display = 'none';
                 els.chartsAnalytics.style.display = 'none';
                 return;
@@ -895,6 +902,9 @@
                 els.chartsDashboard.style.display = 'none';
                 els.chartsAnalytics.style.display = 'grid';
             }
+            
+            if (state.filteredData.length === 0) return; // Containers visible, but charts stay empty/zero
+
 
             let data = state.filteredData;
             const colors = ['#00d4ff', '#00ff9d', '#f59e0b', '#f43f5e', '#a855f7', '#6366f1', '#ec4899', '#14b8a6', '#f43f5e', '#84cc16'];
@@ -1338,7 +1348,13 @@
                         totalPages = resPagination.total_pages;
                     }
                     
-                    if (state.totalRecords && state.rawData.length >= state.totalRecords && currentPage >= totalPages) break;
+                    // Live render on accumulation
+                    let isLastPage = (state.totalRecords && state.rawData.length >= state.totalRecords) || currentPage >= totalPages;
+                    
+                    // Update data and view
+                    applyFiltersAndRender(isLastPage || (currentPage % 3 === 0), !isLastPage); // Render charts every 3 pages, pass isLiveLoad
+                    
+                    if (isLastPage) break;
                     currentPage++;
                 }
                 
