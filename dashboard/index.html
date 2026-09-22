@@ -1,355 +1,433 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTL Exception Realtime Dashboard</title>
+    <title>GTL Exception Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              navy: { 700: '#1a233a', 800: '#111727', 900: '#0a0e1a' }
+            }
+          }
+        }
+      }
+    </script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background-color: #f3f4f6; }
-        .chart-container { height: 320px; }
         [v-cloak] { display: none; }
+        .chart-container { height: 320px; width: 100%; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+        input[type="date"], input[type="number"], input[type="text"] { color-scheme: dark; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
 </head>
-<body class="text-gray-800 font-sans">
-    <div id="app" v-cloak class="min-h-screen flex flex-col">
-        <!-- Header -->
-        <header class="bg-white shadow-sm sticky top-0 z-10">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                <div class="flex items-center">
-                    <i class="fa-solid fa-truck-fast text-blue-600 text-2xl mr-3"></i>
-                    <h1 class="text-xl font-bold text-gray-900">GTL Exception Realtime Dashboard</h1>
-                </div>
-                <div class="flex items-center space-x-3">
-                    <span v-if="!extInstalled" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                        <i class="fa-solid fa-triangle-exclamation mr-2"></i> Extension Not Active
+<body class="bg-navy-900 text-gray-200 font-sans overflow-hidden">
+    <div id="app" v-cloak class="flex h-screen w-full">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-navy-800 border-r border-gray-800 flex flex-col shrink-0">
+            <div class="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
+                <i class="fa-solid fa-truck-fast text-cyan-400 text-2xl mr-3"></i>
+                <h1 class="text-xl font-bold text-white tracking-wider">GTL<span class="text-cyan-400">Portal</span></h1>
+            </div>
+            <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+                <a @click="currentView='dashboard'" :class="currentView==='dashboard'?'bg-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400':'text-gray-400 hover:text-gray-100 hover:bg-white/5'" class="block px-4 py-3 rounded cursor-pointer transition flex items-center">
+                    <i class="fa-solid fa-chart-line w-6 text-center mr-2"></i> Dashboard
+                </a>
+                <a @click="currentView='table'" :class="currentView==='table'?'bg-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400':'text-gray-400 hover:text-gray-100 hover:bg-white/5'" class="block px-4 py-3 rounded cursor-pointer transition flex items-center">
+                    <i class="fa-solid fa-table w-6 text-center mr-2"></i> Data Table
+                </a>
+                <a @click="currentView='analytics'" :class="currentView==='analytics'?'bg-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400':'text-gray-400 hover:text-gray-100 hover:bg-white/5'" class="block px-4 py-3 rounded cursor-pointer transition flex items-center">
+                    <i class="fa-solid fa-chart-pie w-6 text-center mr-2"></i> Analytics
+                </a>
+                <a @click="currentView='settings'" :class="currentView==='settings'?'bg-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400':'text-gray-400 hover:text-gray-100 hover:bg-white/5'" class="block px-4 py-3 rounded cursor-pointer transition flex items-center">
+                    <i class="fa-solid fa-gear w-6 text-center mr-2"></i> Settings
+                </a>
+            </nav>
+            <div class="p-4 border-t border-gray-800 text-xs text-gray-500 shrink-0">
+                <div v-if="!extInstalled" class="flex items-center text-red-400 mb-2"><i class="fa-solid fa-circle-xmark mr-2"></i> Ext Inactive</div>
+                <div v-else class="flex items-center text-green-400 mb-2"><i class="fa-solid fa-circle-check mr-2"></i> Ext Active</div>
+                <div>v19.0 (Dark Portal)</div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col h-screen overflow-hidden">
+            <!-- Header -->
+            <header class="h-16 bg-navy-800 border-b border-gray-800 flex items-center justify-between px-6 shrink-0 shadow-sm z-10">
+                <h2 class="text-lg font-bold text-gray-100 capitalize">{ currentView.replace('-', ' ') }</h2>
+                <div class="flex items-center space-x-4">
+                    <span v-if="loadingProgress" class="text-cyan-400 text-sm font-medium animate-pulse">
+                        <i class="fa-solid fa-spinner fa-spin mr-1"></i> { loadingProgress }
                     </span>
-                    <span v-else class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                        <i class="fa-solid fa-circle-check mr-2"></i> Extension Active
+                    <span v-if="cacheWarning" class="text-yellow-500 text-sm flex items-center cursor-help" title="Data may be stale. Cache > 6 hours old.">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stale Data
                     </span>
-                    
-                    <span v-if="loadingProgress" class="text-sm font-bold text-indigo-600 animate-pulse ml-2 mr-2">
-                        {{ loadingProgress }}
-                    </span>
-                    <span v-else class="text-sm text-gray-500 mr-2">
-                        <i class="fa-regular fa-clock mr-1"></i> Last updated: {{ lastRefresh || 'Never' }}
-                    </span>
-
-                    
-                    <button v-if="resumeAvailable && !loading && !isAllLoaded" @click="resumeSession" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded shadow-sm text-sm font-medium transition flex items-center mr-2">
-                        <i class="fa-solid fa-rotate-right mr-2"></i> Resume Previous ({{resumeState.records.length}} loaded)
-                    </button>
-                    
-                    <button v-if="!isAllLoaded && rawData.length > 0 && !resumeAvailable" @click="loadAll(null)" :disabled="loading || !extInstalled" class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded shadow-sm text-sm font-medium transition flex items-center">
-                        <i class="fa-solid fa-cloud-arrow-down mr-2" :class="{'animate-bounce': loading && loadingProgress.includes('Loading page')}"></i> 
-                        <span v-if="errorMsg && rawData.length > 5000">Resume Loading</span>
-                        <span v-else>Load All Data</span>
-                    </button>
-                    <button v-else-if="isAllLoaded && rawData.length > 0" class="bg-gray-100 text-gray-600 border border-gray-300 px-4 py-2 rounded shadow-sm text-sm font-medium flex items-center cursor-default">
-                        <i class="fa-solid fa-check text-green-500 mr-2"></i> All {{ totalRecords }} Loaded
-                    </button>
-                    
-                    <button @click="refresh" :disabled="loading || !extInstalled" class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded shadow-sm text-sm font-medium transition flex items-center">
-                        <i class="fa-solid fa-rotate-right mr-2" :class="{'animate-spin': loading && !loadingProgress.includes('Loading page')}"></i> Refresh
-                    </button>
-                    <button @click="exportAll" :disabled="loading || !extInstalled" class="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded shadow-sm text-sm font-medium transition flex items-center">
-                        <i class="fa-solid fa-file-excel mr-2"></i> Export
+                    <span class="text-xs text-gray-400">Last Update: { lastRefresh || 'Never' }</span>
+                    <button @click="forceRefresh" :disabled="loading || !extInstalled" class="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-4 py-2 rounded text-sm font-medium shadow-[0_0_10px_rgba(6,182,212,0.3)] transition flex items-center">
+                        <i class="fa-solid fa-rotate-right mr-2" :class="{'fa-spin': loading && !loadingProgress.includes('Loading page')}"></i> Sync GTL
                     </button>
                 </div>
-            </div>
-        </header>
+            </header>
 
-        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            
-            <!-- Error Alert -->
-            <div v-if="errorMsg" class="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">
-                <div class="flex">
-                    <div class="flex-shrink-0"><i class="fa-solid fa-circle-xmark text-red-500"></i></div>
-                    <div class="ml-3 flex-1 overflow-auto">
-                        <p class="text-sm text-red-700 font-medium whitespace-pre-wrap">{{ errorMsg }}</p>
-                    </div>
-                </div>
-            </div>
-
-            
-            <!-- Server-Side Filters Banner -->
-            <div class="mb-4 bg-indigo-50 border border-indigo-200 p-3 rounded shadow-sm flex items-center justify-between">
-                <div class="flex items-center text-indigo-800 text-sm">
-                    <i class="fa-solid fa-server mr-2 text-indigo-500"></i>
-                    <strong>Server-Side Filters Active (Fast Load):</strong>
-                    <span class="ml-2 px-2 py-0.5 bg-white rounded border border-indigo-100 text-xs">Priority: P1</span>
-                    <span class="ml-2 px-2 py-0.5 bg-white rounded border border-indigo-100 text-xs">Type: Time / Status issues</span>
-                    <span class="ml-2 px-2 py-0.5 bg-white rounded border border-indigo-100 text-xs">Status: Exclude Closed</span>
-                    <span class="ml-2 px-2 py-0.5 bg-white rounded border border-indigo-100 text-xs">Date: Last 60 Days</span>
-                </div>
-            </div>
-
-            <!-- Insight Banner -->
-            <div v-if="filteredData.length > 0" class="mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-4 rounded-lg shadow-sm">
-                <h3 class="text-blue-800 font-bold text-sm mb-1"><i class="fa-solid fa-lightbulb text-yellow-500 mr-2"></i> AI Auto-Insights</h3>
-                <p class="text-gray-700 text-sm" v-html="autoInsights"></p>
-            </div>
-
-            <!-- KPI Cards -->
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center">
-                    <div class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-wide">Loaded</div>
-                    <div class="text-2xl font-bold text-gray-800">{{ summary.total }}</div>
-                </div>
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center">
-                    <div class="text-red-500 text-xs font-medium mb-1 uppercase tracking-wide">Over SLA</div>
-                    <div class="text-2xl font-bold text-red-600 flex items-baseline">
-                        {{ summary.overSla }}
-                        <span class="text-xs ml-2 text-red-400 font-normal">({{ summary.percentOverSla }}%)</span>
-                    </div>
-                </div>
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center">
-                    <div class="text-amber-500 text-xs font-medium mb-1 uppercase tracking-wide">Wait Feedback</div>
-                    <div class="text-2xl font-bold text-amber-600">{{ summary.waiting }}</div>
-                </div>
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center">
-                    <div class="text-blue-500 text-xs font-medium mb-1 uppercase tracking-wide">Submitted</div>
-                    <div class="text-2xl font-bold text-blue-600">{{ summary.submitted }}</div>
-                </div>
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center bg-indigo-50/50">
-                    <div class="text-indigo-600 text-xs font-medium mb-1 uppercase tracking-wide">Avg Age</div>
-                    <div class="text-2xl font-bold text-indigo-700">{{ summary.avgAge }} <span class="text-xs font-normal">days</span></div>
-                </div>
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center bg-orange-50/50">
-                    <div class="text-orange-600 text-xs font-medium mb-1 uppercase tracking-wide">Aging > 7d</div>
-                    <div class="text-2xl font-bold text-orange-700">{{ summary.aging7d }}</div>
-                </div>
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center bg-red-50/50">
-                    <div class="text-red-600 text-xs font-medium mb-1 uppercase tracking-wide">Aging > 14d</div>
-                    <div class="text-2xl font-bold text-red-700">{{ summary.aging14d }}</div>
-                </div>
-                <div class="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col justify-center">
-                    <div class="text-green-500 text-xs font-medium mb-1 uppercase tracking-wide">Closed</div>
-                    <div class="text-2xl font-bold text-green-600">{{ summary.closed }}</div>
-                </div>
-            </div>
-
-            <!-- Primary Charts -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" v-show="rawData.length > 0">
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">Daily Exceptions Trend (Last 60 Days)</h3>
-                    <div id="chartDailyTrend" class="chart-container"></div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">Exception Type Breakdown (Daily)</h3>
-                    <div id="chartTypeTrend" class="chart-container"></div>
-                </div>
-            </div>
-            
-            <!-- Secondary Charts -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6" v-show="rawData.length > 0">
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">Aging Bucket Analysis</h3>
-                    <div id="chartAging" class="chart-container" style="height: 280px;"></div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">Top 10 Current Facility</h3>
-                    <div id="chartFacility" class="chart-container" style="height: 280px;"></div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">Avg Resp Time by Facility (Hours)</h3>
-                    <div id="chartRespTime" class="chart-container" style="height: 280px;"></div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">Weekly Trend</h3>
-                    <div id="chartWeekly" class="chart-container" style="height: 280px;"></div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">By Source</h3>
-                    <div id="chartSource" class="chart-container" style="height: 280px;"></div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                    <h3 class="text-md font-semibold text-gray-700 mb-2">By Shipment Leg</h3>
-                    <div id="chartLeg" class="chart-container" style="height: 280px;"></div>
-                </div>
-            </div>
-
-            <!-- Data Table Section -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-                <!-- Filters Bar -->
-                <div class="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap gap-4 items-end">
-                    
-                    <multi-select v-model="filters.status" :options="options.status" label="Status" width-class="w-48"></multi-select>
-                    <multi-select v-model="filters.priority" :options="options.priority" label="Priority" width-class="w-32"></multi-select>
-                    <multi-select v-model="filters.source" :options="options.source" label="Source" width-class="w-32"></multi-select>
-                    <multi-select v-model="filters.type" :options="options.type" label="Type / Reason" width-class="w-64"></multi-select>
-                    <multi-select v-model="filters.facility" :options="options.facility" label="Facility" width-class="w-64"></multi-select>
-                    
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1">Start Date (Created)</label>
-                        <input type="date" v-model="filters.startDate" class="block w-40 text-sm border-gray-300 bg-white rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border h-9">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-500 mb-1">End Date (Created)</label>
-                        <input type="date" v-model="filters.endDate" class="block w-40 text-sm border-gray-300 bg-white rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border h-9">
-                    </div>
-                    
-                    <div class="flex items-center space-x-2 bg-white px-3 h-9 rounded border border-gray-300 shadow-sm mb-0">
-                        <input type="checkbox" id="excludeTest" v-model="excludeTestAWB" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="excludeTest" class="text-sm text-gray-700 font-medium cursor-pointer">Exclude Test AWBs</label>
-                    </div>
-                    
-                    <div class="mb-0">
-                        <button @click="clearFilters" class="text-sm bg-white border border-gray-300 text-gray-600 hover:text-red-600 hover:border-red-400 px-3 h-9 rounded transition shadow-sm flex items-center">
-                            <i class="fa-solid fa-filter-circle-xmark mr-1"></i> Clear
-                        </button>
-                    </div>
-                    
-                    <div class="w-full mt-1 flex justify-end">
-                        <div class="text-sm text-gray-600 font-medium">
-                            Showing {{ paginatedData.length }} of {{ filteredData.length }} filtered
-                            <span v-if="excludeTestAWB && testAWBCount > 0" class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full ml-1 mr-1">
-                                {{ testAWBCount }} test AWBs hidden
-                            </span>
-                            <span class="text-gray-400 mx-2">|</span> 
-                            Total Loaded: {{ rawData.length }} 
-                            <span v-if="totalRecords > 0">/ {{ totalRecords }} in GTL</span>
-                            <span v-if="!isAllLoaded && rawData.length > 0" class="ml-2 text-blue-600 hover:underline cursor-pointer" @click="loadAll">(Load All)</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Exception ID</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Exception No</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">AWB Number</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">TTS Ticket ID</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Source</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Assigned Facility</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Exception CreatedAt</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Exception Status</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Processing SLA</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Last UpdatedAt</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Exception Type</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Priority</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">User Type</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Service Type</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Delivery Type</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Shipment Leg Type</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Package Status</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Assignee</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Client</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Exception Rule ID</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Task No</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Task Type</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Review Feedback</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <tr v-if="loading && rawData.length===0">
-                                <td colspan="23" class="px-6 py-10 text-center text-gray-500">
-                                    <i class="fa-solid fa-spinner animate-spin text-2xl mb-2"></i><br>Loading data...
-                                </td>
-                            </tr>
-                            <tr v-else-if="paginatedData.length === 0">
-                                <td colspan="23" class="px-6 py-10 text-center text-gray-500">No data found matching your filters.</td>
-                            </tr>
-                            <tr v-for="(row, index) in paginatedData" :key="index" class="hover:bg-gray-50">
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{{ row.exception_id || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{{ row.exception_no || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-blue-600">{{ getTracking(row) }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.tts_ticket_id || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ getSource(row) }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ getFacility(row) }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ formatTime(getCreated(row)) }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm">
-                                    <span :class="getStatusColor(getStatus(row))" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                                        {{ getStatus(row) }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.processing_sla || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ formatTime(row.last_updated_time || row.updated_at) }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 truncate max-w-xs" :title="getReason(row)">{{ getReason(row) }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm">
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                        {{ getPriority(row) }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.user_type || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.service_type || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.delivery_type || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ getLeg(row) }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.package_status ? (row.package_status.name || row.package_status) : '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.assignee || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.client || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 truncate max-w-xs" :title="row.exception_rule_id">{{ row.exception_rule_id || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.task_no || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.task_type || '-' }}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ row.review_feedback || row.decision || '-' }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <!-- Scrollable View Area -->
+            <div class="flex-1 overflow-y-auto p-6 custom-scrollbar relative">
+                
+                <!-- Global Error Alert -->
+                <div v-if="errorMsg" class="mb-6 bg-red-900/30 border border-red-700/50 p-4 rounded-lg shadow-sm flex items-start">
+                    <i class="fa-solid fa-circle-xmark text-red-500 mt-0.5 mr-3"></i>
+                    <p class="text-sm text-red-400 font-medium whitespace-pre-wrap">{ errorMsg }</p>
                 </div>
                 
-                <!-- Pagination -->
-                <div class="bg-white px-4 py-3 border-t border-gray-200 flex items-center justify-between sm:px-6">
-                    <div class="flex-1 flex justify-between sm:hidden">
-                        <button @click="page--" :disabled="page===1" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Previous</button>
-                        <button @click="page++" :disabled="page>=totalPages" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Next</button>
+                <!-- Cache Success Alert (only on Dashboard or Table) -->
+                <div v-if="cacheMsg && !cacheWarning && ['dashboard','table'].includes(currentView)" class="mb-6 bg-green-900/20 border border-green-700/50 p-4 rounded-lg shadow-sm flex items-center">
+                    <i class="fa-solid fa-circle-check text-green-500 mr-3"></i>
+                    <p class="text-sm text-green-400 font-medium">{ cacheMsg }</p>
+                </div>
+
+                <!-- DASHBOARD VIEW -->
+                <div v-show="currentView === 'dashboard'" class="space-y-6">
+                    <!-- AI Insights Banner -->
+                    <div v-if="filteredData.length > 0" class="bg-gradient-to-r from-blue-900/40 to-cyan-900/40 border border-cyan-800/50 p-5 rounded-xl shadow-lg">
+                        <h3 class="text-cyan-400 font-bold text-sm mb-2 uppercase tracking-wide flex items-center"><i class="fa-solid fa-lightbulb text-yellow-400 mr-2"></i> Auto-Insights</h3>
+                        <p class="text-gray-300 text-sm leading-relaxed" v-html="autoInsights"></p>
                     </div>
-                    <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+
+                    <!-- KPI Grid -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
+                        <div class="bg-navy-800 rounded-xl p-4 border border-gray-800 shadow-lg flex flex-col justify-center">
+                            <div class="text-gray-400 text-xs font-medium mb-1 uppercase tracking-wider">Loaded</div>
+                            <div class="text-2xl font-bold text-gray-100">{ summary.total }</div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-red-900/50 shadow-[0_0_15px_rgba(244,63,94,0.05)] flex flex-col justify-center relative overflow-hidden">
+                            <div class="absolute -right-4 -top-4 opacity-10 text-red-500"><i class="fa-solid fa-fire text-6xl"></i></div>
+                            <div class="text-red-400 text-xs font-medium mb-1 uppercase tracking-wider relative z-10">Over SLA</div>
+                            <div class="text-2xl font-bold text-red-400 flex items-baseline relative z-10">
+                                { summary.overSla }
+                                <span class="text-xs ml-2 text-red-500 font-normal">({ summary.percentOverSla }%)</span>
+                            </div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-yellow-900/30 shadow-lg flex flex-col justify-center">
+                            <div class="text-yellow-500 text-xs font-medium mb-1 uppercase tracking-wider">Wait Feedback</div>
+                            <div class="text-2xl font-bold text-yellow-500">{ summary.waiting }</div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-blue-900/30 shadow-lg flex flex-col justify-center">
+                            <div class="text-blue-400 text-xs font-medium mb-1 uppercase tracking-wider">Submitted</div>
+                            <div class="text-2xl font-bold text-blue-400">{ summary.submitted }</div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-indigo-900/50 shadow-[0_0_15px_rgba(99,102,241,0.05)] flex flex-col justify-center">
+                            <div class="text-indigo-400 text-xs font-medium mb-1 uppercase tracking-wider">Avg Age</div>
+                            <div class="text-2xl font-bold text-indigo-400">{ summary.avgAge } <span class="text-xs font-normal">days</span></div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-orange-900/50 shadow-lg flex flex-col justify-center">
+                            <div class="text-orange-400 text-xs font-medium mb-1 uppercase tracking-wider">Aging > 7d</div>
+                            <div class="text-2xl font-bold text-orange-400">{ summary.aging7d }</div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-rose-900/50 shadow-lg flex flex-col justify-center">
+                            <div class="text-rose-500 text-xs font-medium mb-1 uppercase tracking-wider">Aging > 14d</div>
+                            <div class="text-2xl font-bold text-rose-500">{ summary.aging14d }</div>
+                        </div>
+                        <div class="bg-navy-800 rounded-xl p-4 border border-emerald-900/30 shadow-lg flex flex-col justify-center">
+                            <div class="text-emerald-400 text-xs font-medium mb-1 uppercase tracking-wider">Closed</div>
+                            <div class="text-2xl font-bold text-emerald-400">{ summary.closed }</div>
+                        </div>
+                    </div>
+
+                    <!-- Top 2 Charts -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" v-if="rawData.length > 0">
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Exceptions Trend (Last {settings.defaultDays} Days)</h3>
+                            <div id="chartDailyTrend" class="chart-container"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Top 10 Current Facility</h3>
+                            <div id="chartFacility" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TABLE VIEW -->
+                <div v-show="currentView === 'table'" class="flex flex-col space-y-4 h-full">
+                    <!-- Filters bar -->
+                    <div class="bg-navy-800 border border-gray-800 p-5 rounded-xl shadow-lg flex flex-wrap gap-4 items-end shrink-0">
+                        <multi-select v-model="filters.status" :options="options.status" label="Status" width-class="w-48"></multi-select>
+                        <multi-select v-model="filters.priority" :options="options.priority" label="Priority" width-class="w-32"></multi-select>
+                        <multi-select v-model="filters.source" :options="options.source" label="Source" width-class="w-32"></multi-select>
+                        <multi-select v-model="filters.type" :options="options.type" label="Type / Reason" width-class="w-64"></multi-select>
+                        <multi-select v-model="filters.facility" :options="options.facility" label="Facility" width-class="w-64"></multi-select>
+                        
                         <div>
-                            <p class="text-sm text-gray-700">
-                                Page <span class="font-medium">{{ page }}</span> of <span class="font-medium">{{ totalPages || 1 }}</span>
-                            </p>
+                            <label class="block text-xs font-medium text-gray-400 mb-1">Start Date (Created)</label>
+                            <input type="date" v-model="filters.startDate" class="block w-40 text-sm bg-gray-900 border-gray-700 rounded-md shadow-sm focus:ring-cyan-500 focus:border-cyan-500 px-2 py-1 border h-9">
                         </div>
                         <div>
-                            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                                <button @click="page=1" :disabled="page===1" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                            <label class="block text-xs font-medium text-gray-400 mb-1">End Date (Created)</label>
+                            <input type="date" v-model="filters.endDate" class="block w-40 text-sm bg-gray-900 border-gray-700 rounded-md shadow-sm focus:ring-cyan-500 focus:border-cyan-500 px-2 py-1 border h-9">
+                        </div>
+                        
+                        <div class="ml-auto flex items-center gap-3">
+                            <button @click="clearFilters" class="text-gray-400 hover:text-red-400 border border-gray-700 hover:border-red-500/50 bg-gray-900 px-4 h-9 rounded transition text-sm flex items-center shadow-sm">
+                                <i class="fa-solid fa-filter-circle-xmark mr-2"></i> Clear
+                            </button>
+                            <button @click="exportAll" :disabled="loading || !extInstalled" class="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 border border-emerald-500/30 px-4 h-9 rounded transition text-sm flex items-center shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                                <i class="fa-solid fa-file-excel mr-2"></i> Export
+                            </button>
+                        </div>
+                        
+                        <div class="w-full mt-2 flex justify-between items-center border-t border-gray-800 pt-3">
+                            <div class="text-sm text-gray-400 flex items-center">
+                                Showing <span class="text-white font-bold mx-1">{ paginatedData.length }</span> of <span class="text-white font-bold mx-1">{ filteredData.length }</span> filtered
+                                <span class="mx-3 border-l border-gray-700 h-4"></span>
+                                Total Loaded: <span class="text-white font-bold ml-1">{ rawData.length }</span> <span v-if="totalRecords > 0" class="ml-1">/ { totalRecords } in GTL</span>
+                                <span v-if="settings.excludeTestAWB && testAWBCount > 0" class="ml-3 text-xs bg-gray-800 text-gray-500 px-2 py-1 rounded border border-gray-700">
+                                    { testAWBCount } tests hidden
+                                </span>
+                            </div>
+                            <button v-if="!isAllLoaded && rawData.length > 0" @click="loadAll(null)" class="text-cyan-400 hover:text-cyan-300 text-sm font-medium flex items-center">
+                                <i class="fa-solid fa-cloud-arrow-down mr-1"></i> Load Remaining
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="bg-navy-800 border border-gray-800 rounded-xl shadow-lg flex-1 flex flex-col min-h-[500px] overflow-hidden">
+                        <div class="overflow-auto flex-1 custom-scrollbar">
+                            <table class="min-w-full divide-y divide-gray-800">
+                                <thead class="bg-gray-900/80 sticky top-0 z-10 backdrop-blur">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Exception ID</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Exception No</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">AWB Number</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">TTS Ticket ID</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Source</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Assigned Facility</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Exception CreatedAt</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Exception Status</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Processing SLA</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Last UpdatedAt</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Exception Type</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Priority</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">User Type</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Service Type</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Delivery Type</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Shipment Leg Type</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Package Status</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Assignee</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Client</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Exception Rule ID</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Task No</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Task Type</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Review Feedback</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-navy-800 divide-y divide-gray-800/60">
+                                    <tr v-if="loading && rawData.length===0">
+                                        <td colspan="23" class="px-6 py-16 text-center text-gray-500">
+                                            <i class="fa-solid fa-spinner animate-spin text-3xl mb-3 text-cyan-500/50"></i><br>Fetching data from GTL...
+                                        </td>
+                                    </tr>
+                                    <tr v-else-if="paginatedData.length === 0">
+                                        <td colspan="23" class="px-6 py-16 text-center text-gray-500">No data found matching your filters.</td>
+                                    </tr>
+                                    <tr v-for="(row, index) in paginatedData" :key="index" class="hover:bg-white/5 transition duration-150">
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">{ row.exception_id || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">{ row.exception_no || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-cyan-400">{ getTracking(row) }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.tts_ticket_id || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ getSource(row) }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">{ getFacility(row) }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ formatTime(getCreated(row)) }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm">
+                                            <span :class="getStatusColor(getStatus(row))" class="px-2 py-0.5 inline-flex text-xs leading-5 font-medium rounded">
+                                                { getStatus(row) }
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.processing_sla || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ formatTime(row.last_updated_time || row.updated_at) }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300 truncate max-w-xs" :title="getReason(row)">{ getReason(row) }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm">
+                                            <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-medium rounded bg-gray-700 text-gray-300 border border-gray-600">
+                                                { getPriority(row) }
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.user_type || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.service_type || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.delivery_type || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ getLeg(row) }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.package_status ? (row.package_status.name || row.package_status) : '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.assignee || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.client || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400 truncate max-w-xs" :title="row.exception_rule_id">{ row.exception_rule_id || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.task_no || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.task_type || '-' }</td>
+                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{ row.review_feedback || row.decision || '-' }</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination Footer -->
+                        <div class="bg-navy-800 px-4 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
+                            <div>
+                                <p class="text-sm text-gray-400">
+                                    Page <span class="font-bold text-white">{ page }</span> of <span class="font-bold text-white">{ totalPages || 1 }</span>
+                                </p>
+                            </div>
+                            <nav class="relative z-0 inline-flex shadow-sm gap-1" aria-label="Pagination">
+                                <button @click="page=1" :disabled="page===1" class="relative inline-flex items-center px-3 py-1.5 rounded bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 transition border border-gray-700">
                                     <i class="fa-solid fa-angles-left"></i>
                                 </button>
-                                <button @click="page--" :disabled="page===1" class="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                                <button @click="page--" :disabled="page===1" class="relative inline-flex items-center px-3 py-1.5 rounded bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 transition border border-gray-700">
                                     <i class="fa-solid fa-angle-left"></i>
                                 </button>
-                                <button @click="page++" :disabled="page>=totalPages" class="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                                <button @click="page++" :disabled="page>=totalPages" class="relative inline-flex items-center px-3 py-1.5 rounded bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 transition border border-gray-700">
                                     <i class="fa-solid fa-angle-right"></i>
                                 </button>
-                                <button @click="page=totalPages" :disabled="page>=totalPages" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                                <button @click="page=totalPages" :disabled="page>=totalPages" class="relative inline-flex items-center px-3 py-1.5 rounded bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 transition border border-gray-700">
                                     <i class="fa-solid fa-angles-right"></i>
                                 </button>
                             </nav>
                         </div>
                     </div>
                 </div>
-            </div>
 
+                <!-- ANALYTICS VIEW -->
+                <div v-show="currentView === 'analytics'" class="space-y-6" v-if="rawData.length > 0">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Exception Type Breakdown (Daily)</h3>
+                            <div id="chartTypeTrend" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Aging Bucket Analysis</h3>
+                            <div id="chartAging" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Avg Resp Time by Facility (Hrs)</h3>
+                            <div id="chartRespTime" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Weekly Trend</h3>
+                            <div id="chartWeekly" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">By Source</h3>
+                            <div id="chartSource" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                        <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
+                            <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">By Shipment Leg</h3>
+                            <div id="chartLeg" class="chart-container" style="height: 300px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SETTINGS VIEW -->
+                <div v-show="currentView === 'settings'" class="max-w-4xl space-y-6">
+                    <div class="bg-navy-800 rounded-xl shadow-lg border border-gray-800 overflow-hidden">
+                        <div class="p-6 border-b border-gray-800">
+                            <h3 class="text-lg font-bold text-white mb-1"><i class="fa-solid fa-sliders text-cyan-400 mr-2"></i> Dashboard Configuration</h3>
+                            <p class="text-sm text-gray-400">Settings are saved locally and apply automatically to GTL data fetching.</p>
+                        </div>
+                        
+                        <div class="p-6 space-y-6">
+                            <!-- Server Filters Section -->
+                            <div>
+                                <h4 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-gray-700 pb-2">Server-Side Filters</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-400 mb-1">Time Range (Last N Days)</label>
+                                        <input type="number" v-model.number="settings.defaultDays" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-400 mb-1">Priority Codes</label>
+                                        <input type="text" v-model="settings.priority" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition" placeholder="e.g. 100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-400 mb-1">Status Codes</label>
+                                        <input type="text" v-model="settings.status" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition" placeholder="e.g. 100,200,300">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-400 mb-1">Exception Type Codes</label>
+                                        <input type="text" v-model="settings.exceptionType" class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white focus:border-cyan-500 transition" placeholder="e.g. 100,200">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Application Toggles Section -->
+                            <div>
+                                <h4 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 border-b border-gray-700 pb-2">Application Preferences</h4>
+                                <div class="space-y-4">
+                                    <label class="flex items-center space-x-3 cursor-pointer group">
+                                        <div class="relative flex items-center">
+                                            <input type="checkbox" v-model="settings.excludeTestAWB" class="sr-only">
+                                            <div class="w-10 h-5 bg-gray-700 rounded-full transition-colors duration-200 ease-in-out" :class="{'bg-cyan-500': settings.excludeTestAWB}"></div>
+                                            <div class="absolute left-1 w-3 h-3 bg-white rounded-full transition-transform duration-200 ease-in-out" :class="{'translate-x-5': settings.excludeTestAWB}"></div>
+                                        </div>
+                                        <span class="text-sm font-medium text-gray-300 group-hover:text-white transition">Exclude Test AWBs (Hide Non-GTL7 prefixes)</span>
+                                    </label>
+                                    
+                                    <label class="flex items-center space-x-3 cursor-pointer group">
+                                        <div class="relative flex items-center">
+                                            <input type="checkbox" v-model="settings.autoRefresh" class="sr-only">
+                                            <div class="w-10 h-5 bg-gray-700 rounded-full transition-colors duration-200 ease-in-out" :class="{'bg-cyan-500': settings.autoRefresh}"></div>
+                                            <div class="absolute left-1 w-3 h-3 bg-white rounded-full transition-transform duration-200 ease-in-out" :class="{'translate-x-5': settings.autoRefresh}"></div>
+                                        </div>
+                                        <span class="text-sm font-medium text-gray-300 group-hover:text-white transition flex items-center">
+                                            Auto Refresh 
+                                            <input type="number" v-model.number="settings.refreshInterval" class="ml-2 w-16 bg-gray-900 border border-gray-700 rounded px-2 py-0.5 text-white text-xs h-7 text-center" @click.stop>
+                                            <span class="ml-2">minutes</span>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-navy-900/50 p-6 border-t border-gray-800 flex justify-between items-center">
+                            <button @click="forceRefresh" class="text-red-400 hover:text-red-300 hover:bg-red-900/20 px-4 py-2 rounded transition border border-transparent hover:border-red-900/50 flex items-center text-sm">
+                                <i class="fa-solid fa-trash-can mr-2"></i> Clear Local Cache
+                            </button>
+                            <button @click="applySettingsAndRefresh" class="bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2 rounded-md shadow-[0_0_10px_rgba(6,182,212,0.3)] transition font-medium">
+                                Save & Re-sync
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </main>
     </div>
 
     <script>
         const { createApp } = Vue;
         
-        // Multi-select Dropdown Component
+        // Multi-select Dropdown Component (Dark Theme)
         const MultiSelect = {
             template: `
                 <div class="relative" :class="widthClass || 'w-48'" ref="dropdown">
-                    <label class="block text-xs font-medium text-gray-500 mb-1">{{ label }}</label>
-                    <button @click="open = !open" type="button" class="w-full text-left bg-white border border-gray-300 rounded-md shadow-sm px-3 h-9 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 flex justify-between items-center transition">
-                        <span class="truncate pr-2 text-gray-700">{{ displayValue }}</span>
-                        <i class="fa-solid fa-chevron-down text-gray-400 text-xs"></i>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">{{ label }}</label>
+                    <button @click="open = !open" type="button" class="w-full text-left bg-gray-900 border border-gray-700 rounded-md shadow-sm px-3 h-9 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 flex justify-between items-center transition hover:border-gray-600">
+                        <span class="truncate pr-2 text-gray-200">{{ displayValue }}</span>
+                        <i class="fa-solid fa-chevron-down text-gray-500 text-xs"></i>
                     </button>
-                    <div v-if="open" class="absolute z-20 mt-1 w-64 bg-white shadow-lg rounded-md border border-gray-200 py-1 left-0">
-                        <div class="flex justify-between px-3 py-2 border-b border-gray-100 text-xs font-medium">
-                            <button @click.prevent="selectAll" class="text-blue-600 hover:text-blue-800 px-1 py-0.5 rounded hover:bg-blue-50 transition">Select All</button>
-                            <button @click.prevent="clearAll" class="text-gray-500 hover:text-red-600 px-1 py-0.5 rounded hover:bg-red-50 transition">Clear</button>
+                    <div v-if="open" class="absolute z-20 mt-1 w-64 bg-gray-800 shadow-xl rounded-md border border-gray-700 py-1 left-0">
+                        <div class="flex justify-between px-3 py-2 border-b border-gray-700 text-xs font-medium">
+                            <button @click.prevent="selectAll" class="text-cyan-400 hover:text-cyan-300 px-1 py-0.5 rounded transition hover:bg-white/5">Select All</button>
+                            <button @click.prevent="clearAll" class="text-gray-400 hover:text-red-400 px-1 py-0.5 rounded transition hover:bg-white/5">Clear</button>
                         </div>
                         <div class="max-h-60 overflow-y-auto custom-scrollbar">
-                            <div v-for="opt in options" :key="opt" class="flex items-center px-3 py-1.5 hover:bg-gray-50 cursor-pointer" @click="toggle(opt)">
-                                <input type="checkbox" :checked="modelValue.includes(opt)" class="h-4 w-4 text-blue-600 border-gray-300 rounded mr-2" @click.stop="toggle(opt)">
-                                <span class="text-sm text-gray-700 truncate" :title="opt">{{ opt }}</span>
+                            <div v-for="opt in options" :key="opt" class="flex items-center px-3 py-1.5 hover:bg-gray-700 cursor-pointer transition" @click="toggle(opt)">
+                                <input type="checkbox" :checked="modelValue.includes(opt)" class="h-4 w-4 text-cyan-500 border-gray-600 bg-gray-900 rounded mr-3 focus:ring-cyan-500 focus:ring-offset-gray-800" @click.stop="toggle(opt)">
+                                <span class="text-sm text-gray-200 truncate" :title="opt">{{ opt }}</span>
                             </div>
                             <div v-if="options.length === 0" class="px-3 py-4 text-center text-sm text-gray-500">No options available</div>
                         </div>
@@ -374,12 +452,8 @@
                     else val.push(opt);
                     this.$emit('update:modelValue', val);
                 },
-                selectAll() {
-                    this.$emit('update:modelValue', [...this.options]);
-                },
-                clearAll() {
-                    this.$emit('update:modelValue', []);
-                },
+                selectAll() { this.$emit('update:modelValue', [...this.options]); },
+                clearAll() { this.$emit('update:modelValue', []); },
                 closeDropdown(e) {
                     if (this.open && !this.$refs.dropdown.contains(e.target)) {
                         this.open = false;
@@ -393,6 +467,16 @@
         const app = createApp({
             data() {
                 return {
+                    currentView: 'dashboard',
+                    settings: {
+                        autoRefresh: true,
+                        refreshInterval: 5,
+                        excludeTestAWB: true,
+                        defaultDays: 60,
+                        priority: '100',
+                        status: '100,200,300',
+                        exceptionType: '100,200'
+                    },
                     extInstalled: false,
                     loading: false,
                     loadingProgress: '',
@@ -401,13 +485,15 @@
                     rawData: [],
                     totalRecords: 0,
                     isAllLoaded: false,
-                    excludeTestAWB: true,
                     filters: { status: [], priority: [], source: [], type: [], facility: [], startDate: '', endDate: '' },
                     page: 1,
                     pageSize: 50,
                     refreshTimer: null,
                     resumeAvailable: false,
-                    resumeState: null
+                    resumeState: null,
+                    cacheMsg: '',
+                    cacheWarning: false,
+                    db: null
                 }
             },
             computed: {
@@ -429,25 +515,17 @@
                         facility: Array.from(opts.facility).sort()
                     };
                 },
-                testAWBCount() {
-                    return this.rawData.filter(x => !String(this.getTracking(x)).startsWith('GTL7')).length;
-                },
+                testAWBCount() { return this.rawData.filter(x => !String(this.getTracking(x)).startsWith('GTL7')).length; },
                 filteredData() {
                     let d = this.rawData;
+                    if (this.settings.excludeTestAWB) d = d.filter(x => String(this.getTracking(x)).startsWith('GTL7'));
                     
-                    // Filter Test AWBs if toggle is ON
-                    if (this.excludeTestAWB) {
-                        d = d.filter(x => String(this.getTracking(x)).startsWith('GTL7'));
-                    }
-                    
-                    // Apply Multi-select filters using AND logic (IN array)
                     if(this.filters.status.length > 0) d = d.filter(x => this.filters.status.includes(this.getStatus(x)));
                     if(this.filters.priority.length > 0) d = d.filter(x => this.filters.priority.includes(this.getPriority(x)));
                     if(this.filters.source.length > 0) d = d.filter(x => this.filters.source.includes(this.getSource(x)));
                     if(this.filters.type.length > 0) d = d.filter(x => this.filters.type.includes(this.getReason(x)));
                     if(this.filters.facility.length > 0) d = d.filter(x => this.filters.facility.includes(this.getFacility(x)));
                     
-                    // Apply Date Range Filter (created_time is unix timestamp in seconds)
                     if(this.filters.startDate) {
                         let st = new Date(this.filters.startDate + "T00:00:00").getTime() / 1000;
                         d = d.filter(x => { let cr = this.getCreated(x); return cr !== '-' && cr >= st; });
@@ -456,80 +534,76 @@
                         let et = new Date(this.filters.endDate + "T23:59:59").getTime() / 1000;
                         d = d.filter(x => { let cr = this.getCreated(x); return cr !== '-' && cr <= et; });
                     }
-                    
                     return d;
                 },
                 paginatedData() {
                     let start = (this.page - 1) * this.pageSize;
                     return this.filteredData.slice(start, start + this.pageSize);
                 },
-                totalPages() {
-                    return Math.ceil(this.filteredData.length / this.pageSize) || 1;
-                },
+                totalPages() { return Math.ceil(this.filteredData.length / this.pageSize) || 1; },
                 summary() {
                     let d = this.filteredData;
                     let now = Date.now() / 1000;
-                    
                     let overSla = d.filter(x => this.getSLA(x)).length;
-                    
-                    let totalAgeDays = 0;
-                    let aging7 = 0;
-                    let aging14 = 0;
-                    let validAges = 0;
+                    let totalAgeDays = 0, aging7 = 0, aging14 = 0, validAges = 0;
                     
                     d.forEach(x => {
                         let c = this.getCreated(x);
                         if(c && c !== '-') {
-                            let ageSecs = now - c;
-                            let ageDays = ageSecs / (24*3600);
+                            let ageDays = (now - c) / 86400;
                             if(ageDays >= 0) {
-                                totalAgeDays += ageDays;
-                                validAges++;
+                                totalAgeDays += ageDays; validAges++;
                                 if(ageDays > 14) aging14++;
                                 else if(ageDays > 7) aging7++;
                             }
                         }
                     });
-
                     return {
-                        total: d.length,
-                        overSla: overSla,
+                        total: d.length, overSla: overSla,
                         percentOverSla: d.length > 0 ? ((overSla / d.length) * 100).toFixed(1) : 0,
                         waiting: d.filter(x => { let s = String(this.getStatus(x)).toLowerCase(); return s.includes('wait') || s.includes('pending'); }).length,
                         submitted: d.filter(x => { let s = String(this.getStatus(x)).toLowerCase(); return s.includes('submit'); }).length,
                         closed: d.filter(x => { let s = String(this.getStatus(x)).toLowerCase(); return s.includes('close') || s.includes('resolved'); }).length,
                         avgAge: validAges > 0 ? (totalAgeDays / validAges).toFixed(1) : 0,
-                        aging7d: aging7,
-                        aging14d: aging14
+                        aging7d: aging7, aging14d: aging14
                     }
                 },
                 autoInsights() {
                     if (this.filteredData.length === 0) return "No data available to generate insights.";
-                    
-                    let d = this.filteredData;
-                    let fCount = {};
-                    let tCount = {};
+                    let d = this.filteredData, fCount = {}, tCount = {};
                     d.forEach(x => {
-                        let f = this.getFacility(x);
-                        if(f !== 'Unknown' && f !== '-') fCount[f] = (fCount[f] || 0) + 1;
-                        let t = this.getReason(x);
-                        if(t !== 'Unknown' && t !== '-') tCount[t] = (tCount[t] || 0) + 1;
+                        let f = this.getFacility(x); if(f !== 'Unknown' && f !== '-') fCount[f] = (fCount[f] || 0) + 1;
+                        let t = this.getReason(x); if(t !== 'Unknown' && t !== '-') tCount[t] = (tCount[t] || 0) + 1;
                     });
-                    
                     let topFac = Object.keys(fCount).sort((a,b) => fCount[b] - fCount[a])[0];
                     let topType = Object.keys(tCount).sort((a,b) => tCount[b] - tCount[a])[0];
                     
                     let parts = [];
-                    if (topFac) parts.push(`&#128205; <strong>${topFac}</strong> has the most exceptions (<strong>${fCount[topFac]}</strong>).`);
-                    if (this.summary.percentOverSla > 20) parts.push(`&#9888; <strong>${this.summary.percentOverSla}%</strong> of records are currently over SLA!`);
-                    if (this.summary.aging14d > 0) parts.push(`&#128308; There are <strong>${this.summary.aging14d}</strong> exceptions older than 14 days requiring urgent attention.`);
-                    if (topType) parts.push(`&#128202; The most common issue is <strong>${topType}</strong> (${tCount[topType]} cases).`);
+                    if (topFac) parts.push(`&#128205; <strong class="text-white">${topFac}</strong> has the most exceptions (<strong class="text-white">${fCount[topFac]}</strong>).`);
+                    if (this.summary.percentOverSla > 20) parts.push(`&#9888; <strong class="text-red-400">${this.summary.percentOverSla}%</strong> are currently over SLA.`);
+                    if (this.summary.aging14d > 0) parts.push(`&#128308; <strong class="text-rose-400">${this.summary.aging14d}</strong> cases older than 14 days.`);
+                    if (topType) parts.push(`&#128202; Top issue: <strong class="text-white">${topType}</strong> (${tCount[topType]} cases).`);
                     
                     if (parts.length === 0) return "Everything looks healthy!";
-                    return parts.join(' &nbsp; | &nbsp; ');
+                    return parts.join(' &nbsp; <span class="text-gray-600">|</span> &nbsp; ');
+                }
+            },
+            watch: {
+                currentView() { this.$nextTick(() => this.updateCharts()); },
+                filters: { deep: true, handler() { this.page = 1; this.updateCharts(); } },
+                'settings.excludeTestAWB': function() { this.page = 1; this.updateCharts(); },
+                settings: {
+                    deep: true,
+                    handler(val) {
+                        localStorage.setItem('gtl_portal_settings', JSON.stringify(val));
+                        this.setupAutoRefresh();
+                    }
                 }
             },
             mounted() {
+                let s = localStorage.getItem('gtl_portal_settings');
+                if(s) { try { Object.assign(this.settings, JSON.parse(s)); } catch(e){} }
+                
                 document.addEventListener('gtl-extension-ready', () => { this.markExtensionActive(); });
                 window.addEventListener('message', (event) => {
                     if (event.data && event.data.source === 'GTL_EXTENSION' && event.data.type === 'PONG') {
@@ -537,18 +611,7 @@
                     }
                 });
 
-                
-                localforage.getItem('gtl_saved_records').then(val => {
-                    if (val && val.length > 0) {
-                        Promise.all([
-                            localforage.getItem('gtl_saved_page'),
-                            localforage.getItem('gtl_saved_total')
-                        ]).then(([page, total]) => {
-                            this.resumeAvailable = true;
-                            this.resumeState = { records: val, page: page || 2, total: total || val.length };
-                        });
-                    }
-                }).catch(e => console.error(e));
+                this.initDB().then(() => { this.loadFromCache(); });
 
                 let pingCount = 0;
                 let pinger = setInterval(() => {
@@ -557,9 +620,7 @@
                     if (this.extInstalled || pingCount > 20) clearInterval(pinger);
                 }, 500);
             },
-            beforeUnmount() {
-                if(this.refreshTimer) clearInterval(this.refreshTimer);
-            },
+            beforeUnmount() { if(this.refreshTimer) clearInterval(this.refreshTimer); },
             methods: {
                 getVal(row, possibleKeys) {
                     for(let k of possibleKeys) {
@@ -587,8 +648,7 @@
                 },
                 getCreated(row) { return this.getVal(row, ['exception_created_at', 'create_time', 'created_at', 'exception_create_time', 'creation_time', 'created_time']) || '-'; },
                 getUpdated(row) { return this.getVal(row, ['last_updated_time', 'updated_at', 'exception_updated_at']) || '-'; },
-                
-                                resumeSession() {
+                resumeSession() {
                     this.rawData = this.resumeState.records;
                     this.totalRecords = this.resumeState.total;
                     this.isAllLoaded = this.rawData.length >= this.totalRecords;
@@ -612,27 +672,10 @@
                     }
                     return new Date(t).toLocaleString('en-GB', { hour12: false });
                 },
-                getStatusColor(status) {
-                    if(!status || status === 'Unknown') return 'bg-gray-100 text-gray-800';
-                    let s = String(status).toLowerCase();
-                    if(s.includes('wait') || s.includes('pending')) return 'bg-yellow-100 text-yellow-800';
-                    if(s.includes('submit')) return 'bg-blue-100 text-blue-800';
-                    if(s.includes('close') || s.includes('resolved')) return 'bg-green-100 text-green-800';
-                    if(s.includes('sla')) return 'bg-red-100 text-red-800';
-                    return 'bg-gray-100 text-gray-800';
-                },
                 clearFilters() {
                     this.filters = { status: [], priority: [], source: [], type: [], facility: [], startDate: '', endDate: '' };
                     this.excludeTestAWB = true; 
                     this.page = 1;
-                },
-                
-                getServerFilters() {
-                    return "&exception_created_time_range_gte=2026-07-24T00:00:00%2B07:00" +
-                           "&exception_created_time_range_lte=2026-09-22T23:59:59%2B07:00" +
-                           "&priority=100" +
-                           "&status=100,200,300" +
-                           "&exception_type=100,200";
                 },
                 extractList(resp) {
 
@@ -683,402 +726,220 @@
                     
                     return target.total || target.total_count || target.count || target.totalCount || target.total_data || 0;
                 },
-                async fetchGTL(url, body) {
-                    return new Promise((resolve, reject) => {
-                        const id = Date.now() + Math.random().toString();
-                        const listener = (event) => {
-                            if (event.source !== window || event.data.source !== 'GTL_EXTENSION' || event.data.id !== id) return;
-                            window.removeEventListener('message', listener);
-                            if (event.data.response.error) reject(new Error(event.data.response.error));
-                            else resolve(event.data.response.data);
-                        };
-                        window.addEventListener('message', listener);
-                        window.postMessage({ source: 'DASHBOARD_APP', type: 'FETCH_GTL', id, url, body }, '*');
-                        setTimeout(() => { 
-                            window.removeEventListener('message', listener); 
-                            reject(new Error("Timeout: Chrome Extension did not respond in time.")); 
-                        }, 15000);
-                    });
-                },
-                async retryFetch(urlsToTry) {
-                    let lastErr = null;
-                    let lastResp = null;
-                    
-                    for (let {url, body} of urlsToTry) {
-                        try {
-                            let res = await this.fetchGTL(url, body);
-                            let baseResp = (res && res.data && res.data.base_resp) ? res.data.base_resp : (res && res.base_resp ? res.base_resp : null);
-                            if (baseResp && baseResp.code !== 0) {
-                                throw new Error(`API Error: ${baseResp.message} (Code: ${baseResp.code})`);
-                            }
-                            
-                            let arr = this.extractList(res);
-                            let total = this.extractTotal(res);
-                            
-                            if (arr && arr.length > 0) {
-                                return { items: arr, total: total || arr.length }; 
-                            } else if (arr && arr.length === 0) {
-                                return { items: [], total: total || 0 };
-                            } else {
-                                lastResp = res; 
-                            }
-                        } catch(e) {
-                            lastErr = e;
-                        }
-                    }
-                    
-                    if (lastResp) {
-                        let preview = JSON.stringify(lastResp).substring(0, 300);
-                        throw new Error(`Data format error. The API returned success, but list not found.\nPreview: ${preview}...`);
-                    }
-                    throw lastErr;
-                },
-                async refresh() {
-                    if(!this.extInstalled) return;
-                    this.loading = true;
-                    this.loadingProgress = 'Fetching page 1...';
-                    this.errorMsg = null;
-                    try {
-                        let sf = this.getServerFilters();
-                        const combos = [
-                            { url: 'search?page_num=1&page_size=5000' + sf, body: null },
-                            { url: 'search?page=1&page_size=5000' + sf, body: null },
-                            { url: 'search', body: { page_num: 1, page_size: 5000, condition: {} } }
-                        ];
-                        
-                        let res = await this.retryFetch(combos);
-                        this.rawData = res.items;
-                        this.totalRecords = res.total;
-                        this.isAllLoaded = this.rawData.length >= this.totalRecords;
-                        this.lastRefresh = new Date().toLocaleTimeString('en-GB', { hour12: false });
-                        
-                        if(this.rawData.length > 0) {
-                            this.updateCharts();
-                        }
-                    } catch(e) {
-                        this.errorMsg = e.message;
-                    } finally {
-                        this.loading = false;
-                        this.loadingProgress = '';
-                    }
-                },
-                async loadAll(startPage = null) {
-                    if(!this.extInstalled) return;
-                    this.loading = true;
-                    this.errorMsg = null;
-                    
-                    let pageSize = 5000;
-                    let totalPages = Math.ceil(this.totalRecords / pageSize) || 1;
-                    let currentPage = startPage || (Math.ceil(this.rawData.length / pageSize) + 1);
-                    
-                    try {
-                        while (currentPage <= totalPages && !this.isAllLoaded) {
-                            let success = false;
-                            let attempts = 0;
-                            let maxAttempts = 3;
-                            
-                            while (attempts < maxAttempts && !success) {
-                                attempts++;
-                                if (attempts > 1) {
-                                    this.loadingProgress = `Retrying page ${currentPage} (Attempt ${attempts}/3)...`;
-                                    await new Promise(r => setTimeout(r, 2000));
-                                } else {
-                                    this.loadingProgress = `Loading page ${currentPage} of ${totalPages} (${Math.min(currentPage*pageSize, this.totalRecords)} / ${this.totalRecords})...`;
-                                }
-                                
-                                try {
-                                    let sf = this.getServerFilters();
-                                    let res = await this.retryFetch([
-                                        { url: `search?page_num=${currentPage}&page_size=${pageSize}` + sf, body: null },
-                                        { url: `search?page=${currentPage}&page_size=${pageSize}` + sf, body: null },
-                                        { url: 'search', body: { page_num: currentPage, page_size: pageSize, condition: {} } }
-                                    ]);
-                                    
-                                    if (res && res.items && res.items.length > 0) {
-                                        this.rawData = this.rawData.concat(res.items);
-                                        
-                                        // Save progress
-                                        localforage.setItem('gtl_saved_records', this.rawData).catch(e=>console.error('Storage full?', e));
-                                        localforage.setItem('gtl_saved_page', currentPage + 1).catch(e=>console.error(e));
-                                        localforage.setItem('gtl_saved_total', this.totalRecords).catch(e=>console.error(e));
-                                        
-                                        success = true;
-                                        if (res.items.length < pageSize) {
-                                            this.isAllLoaded = true;
-                                        }
-                                    } else {
-                                        this.isAllLoaded = true;
-                                        success = true;
-                                    }
-                                } catch (err) {
-                                    if (attempts >= maxAttempts) {
-                                        throw err;
-                                    }
-                                }
-                            }
-                            if (!this.isAllLoaded) currentPage++;
-                        }
-                        this.isAllLoaded = true;
-                        this.updateCharts();
-                    } catch(e) {
-                        this.errorMsg = "Failed at page " + currentPage + ": " + e.message;
-                        this.resumeAvailable = true;
-                        this.resumeState = { records: this.rawData, page: currentPage, total: this.totalRecords };
-                    } finally {
-                        this.loading = false;
-                        this.loadingProgress = '';
-                    }
-                },
-                async exportAll() {
-                    if(!this.extInstalled) return;
-                    this.errorMsg = null;
-                    
-                    try {
-                        if (!this.isAllLoaded && this.totalRecords > this.rawData.length) {
-                            if (!confirm(`This will fetch all ${this.totalRecords} records sequentially. This may take a few moments. Do you want to continue?`)) {
-                                return;
-                            }
-                            await this.loadAll();
-                        }
-                        
-                        this.loading = true;
-                        this.loadingProgress = 'Generating Excel file...';
-                        
-                        await new Promise(r => setTimeout(r, 100));
-                        
-                        if(this.rawData.length === 0) {
-                            alert("No data available to export.");
-                            return;
-                        }
-                        
-                        let exportData = this.filteredData.map(x => ({
-                            "Exception ID": x.exception_id || '-',
-                            "Exception No": x.exception_no || '-',
-                            "AWB Number": this.getTracking(x),
-                            "TTS Ticket ID": x.tts_ticket_id || '-',
-                            "Source": this.getSource(x),
-                            "Assigned Facility": this.getFacility(x),
-                            "Exception CreatedAt": this.formatTime(this.getCreated(x)),
-                            "Exception Status": this.getStatus(x),
-                            "Processing SLA": x.processing_sla || '-',
-                            "Last UpdatedAt": this.formatTime(x.last_updated_time || x.updated_at),
-                            "Exception Type": this.getReason(x),
-                            "Priority": this.getPriority(x),
-                            "User Type": x.user_type || '-',
-                            "Service Type": x.service_type || '-',
-                            "Delivery Type": x.delivery_type || '-',
-                            "Shipment Leg Type": this.getLeg(x),
-                            "Package Status": x.package_status ? (x.package_status.name || x.package_status) : '-',
-                            "Assignee": x.assignee || '-',
-                            "Client": x.client || '-',
-                            "Exception Rule ID": x.exception_rule_id || '-',
-                            "Task No": x.task_no || '-',
-                            "Task Type": x.task_type || '-',
-                            "Review Feedback": x.review_feedback || x.decision || '-'
-                        }));
 
-                        const ws = XLSX.utils.json_to_sheet(exportData);
-                        const wb = XLSX.utils.book_new();
-                        XLSX.utils.book_append_sheet(wb, ws, "GTL Exceptions");
-                        XLSX.writeFile(wb, `GTL_Exceptions_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
-                        
-                    } catch(e) {
-                        this.errorMsg = "Export failed: " + e.message;
-                    } finally {
-                        this.loading = false;
-                        this.loadingProgress = '';
+
+
+
+
+
+
+
+
+                setupAutoRefresh() {
+                    if(this.refreshTimer) clearInterval(this.refreshTimer);
+                    if(this.settings.autoRefresh && this.settings.refreshInterval > 0) {
+                        this.refreshTimer = setInterval(() => this.refresh(), this.settings.refreshInterval * 60 * 1000);
                     }
+                },
+                getServerFilters() {
+                    let end = new Date();
+                    let start = new Date();
+                    start.setDate(end.getDate() - this.settings.defaultDays);
+                    let startStr = start.toISOString().split('T')[0] + "T00:00:00%2B07:00";
+                    let endStr = end.toISOString().split('T')[0] + "T23:59:59%2B07:00";
+                    let p = this.settings.priority ? `&priority=${this.settings.priority}` : '';
+                    let s = this.settings.status ? `&status=${this.settings.status}` : '';
+                    let t = this.settings.exceptionType ? `&exception_type=${this.settings.exceptionType}` : '';
+                    return `&exception_created_time_range_gte=${startStr}&exception_created_time_range_lte=${endStr}${p}${s}${t}`;
+                },
+                applySettingsAndRefresh() {
+                    this.forceRefresh();
+                    this.currentView = 'dashboard';
+                },
+                getStatusColor(status) {
+                    if(!status || status === 'Unknown') return 'bg-gray-800 text-gray-300 border border-gray-700';
+                    let s = String(status).toLowerCase();
+                    if(s.includes('wait') || s.includes('pending')) return 'bg-yellow-900/50 text-yellow-400 border border-yellow-700/50';
+                    if(s.includes('submit')) return 'bg-blue-900/50 text-blue-400 border border-blue-700/50';
+                    if(s.includes('close') || s.includes('resolved')) return 'bg-emerald-900/50 text-emerald-400 border border-emerald-700/50';
+                    if(s.includes('sla')) return 'bg-red-900/50 text-red-400 border border-red-700/50';
+                    return 'bg-gray-800 text-gray-300 border border-gray-700';
                 },
                 updateCharts() {
                     this.$nextTick(() => {
+                        if (this.rawData.length === 0) return;
                         let data = this.filteredData;
-                        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1', '#ec4899', '#14b8a6', '#f43f5e', '#84cc16'];
+                        const colors = ['#00d4ff', '#00ff9d', '#f59e0b', '#f43f5e', '#a855f7', '#6366f1', '#ec4899', '#14b8a6', '#f43f5e', '#84cc16'];
                         let now = Date.now() / 1000;
+                        const applyFilter = (filterKey, value) => { if (!this.filters[filterKey].includes(value)) this.filters[filterKey].push(value); };
+                        const initOpts = { renderer: 'canvas', backgroundColor: 'transparent' };
+
+                        // 1. Daily Trend
+                        let dDom = document.getElementById('chartDailyTrend');
+                        if (dDom) {
+                            let dChart = echarts.getInstanceByDom(dDom) || echarts.init(dDom, 'dark', initOpts);
+                            let dData = {};
+                            data.forEach(x => {
+                                let c = this.getCreated(x);
+                                if(c && c !== '-') { let dt = new Date(c * 1000).toISOString().split('T')[0]; dData[dt] = (dData[dt]||0)+1; }
+                            });
+                            let sortedD = Object.keys(dData).sort();
+                            dChart.setOption({
+                                tooltip: { trigger: 'axis', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                                grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
+                                xAxis: { type: 'category', boundaryGap: false, data: sortedD, axisLine: {lineStyle: {color: '#374151'}} },
+                                yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                                series: [{ data: sortedD.map(k=>dData[k]), type: 'line', smooth: true, areaStyle: {opacity: 0.1}, itemStyle: {color: colors[0]}, symbolSize: 6 }]
+                            }, true);
+                        }
+
+                        // 2. Facility Top 10
+                        let fDom = document.getElementById('chartFacility');
+                        if (fDom) {
+                            let fChart = echarts.getInstanceByDom(fDom) || echarts.init(fDom, 'dark', initOpts);
+                            let fData = data.reduce((acc, curr) => { let f = this.getFacility(curr); acc[f] = (acc[f]||0)+1; return acc; }, {});
+                            let sortedF = Object.entries(fData).sort((a,b) => b[1] - a[1]).slice(0, 10);
+                            fChart.setOption({ 
+                                tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
+                                grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true }, 
+                                yAxis: { type: 'category', data: sortedF.map(x=>x[0]).reverse(), axisLabel: { interval: 0, width: 120, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} }, 
+                                xAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} }, 
+                                series: [{ data: sortedF.map(x=>x[1]).reverse(), type: 'bar', itemStyle: {color: colors[1], borderRadius: [0,4,4,0]} }] 
+                            }, true);
+                            fChart.off('click'); fChart.on('click', p => applyFilter('facility', p.name));
+                        }
+
+                        // 3. Exception Type Trend
+                        let tDom = document.getElementById('chartTypeTrend');
+                        if (tDom) {
+                            let tChart = echarts.getInstanceByDom(tDom) || echarts.init(tDom, 'dark', initOpts);
+                            let tData = {}, tTypes = new Set();
+                            data.forEach(x => {
+                                let c = this.getCreated(x), t = this.getReason(x);
+                                if(c && c !== '-' && t && t !== '-') {
+                                    let dt = new Date(c * 1000).toISOString().split('T')[0];
+                                    if(!tData[dt]) tData[dt] = {};
+                                    tData[dt][t] = (tData[dt][t]||0)+1; tTypes.add(t);
+                                }
+                            });
+                            let topTypes = Array.from(tTypes).sort((a,b) => Object.values(tData).reduce((s,d)=>s+(d[b]||0),0) - Object.values(tData).reduce((s,d)=>s+(d[a]||0),0)).slice(0, 5);
+                            let sortedD = Object.keys(tData).sort();
+                            tChart.setOption({
+                                tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                                legend: { data: topTypes, bottom: 0, textStyle: {color: '#9ca3af'} },
+                                grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                                xAxis: { type: 'category', data: sortedD, axisLine: {lineStyle: {color: '#374151'}} },
+                                yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                                series: topTypes.map((type, idx) => ({ name: type, type: 'bar', stack: 'total', itemStyle: { color: colors[idx % colors.length] }, data: sortedD.map(dt => tData[dt]?.[type] || 0) }))
+                            }, true);
+                        }
+
+                        // 4. Aging Buckets
+                        let aDom = document.getElementById('chartAging');
+                        if (aDom) {
+                            let aChart = echarts.getInstanceByDom(aDom) || echarts.init(aDom, 'dark', initOpts);
+                            let buckets = {'0-3 days':0, '4-7 days':0, '8-14 days':0, '15-30 days':0, '30+ days':0};
+                            data.forEach(x => {
+                                let c = this.getCreated(x);
+                                if(c && c !== '-') {
+                                    let days = (now - c) / 86400;
+                                    if(days <= 3) buckets['0-3 days']++; else if(days <= 7) buckets['4-7 days']++; else if(days <= 14) buckets['8-14 days']++; else if(days <= 30) buckets['15-30 days']++; else buckets['30+ days']++;
+                                }
+                            });
+                            aChart.setOption({
+                                tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                                grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
+                                xAxis: { type: 'category', data: Object.keys(buckets), axisLine: {lineStyle: {color: '#374151'}} },
+                                yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                                series: [{ data: Object.values(buckets), type: 'bar', itemStyle: {color: colors[2], borderRadius: [4,4,0,0]} }]
+                            }, true);
+                        }
+
+                        // 5. Avg Resp Time
+                        let rDom = document.getElementById('chartRespTime');
+                        if (rDom) {
+                            let rChart = echarts.getInstanceByDom(rDom) || echarts.init(rDom, 'dark', initOpts);
+                            let fTimes = {};
+                            data.forEach(x => {
+                                let f = this.getFacility(x), c = this.getCreated(x), u = this.getUpdated(x);
+                                if(f !== 'Unknown' && c && c !== '-' && u && u !== '-') {
+                                    let diffHours = Math.max(0, u - c) / 3600;
+                                    if(!fTimes[f]) fTimes[f] = {sum: 0, count: 0};
+                                    fTimes[f].sum += diffHours; fTimes[f].count++;
+                                }
+                            });
+                            let avgTimes = Object.keys(fTimes).map(k => [k, fTimes[k].sum / fTimes[k].count]).sort((a,b) => b[1] - a[1]).slice(0, 10);
+                            rChart.setOption({
+                                tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, valueFormatter: val => val.toFixed(1) + ' hrs', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                                grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
+                                yAxis: { type: 'category', data: avgTimes.map(x=>x[0]).reverse(), axisLabel: { interval: 0, width: 100, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} },
+                                xAxis: { type: 'value', name: 'Hours', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                                series: [{ data: avgTimes.map(x=>x[1].toFixed(1)).reverse(), type: 'bar', itemStyle: {color: colors[3], borderRadius: [0,4,4,0]} }]
+                            }, true);
+                            rChart.off('click'); rChart.on('click', p => applyFilter('facility', p.name));
+                        }
+
+                        // 6. Weekly Trend
+                        let wDom = document.getElementById('chartWeekly');
+                        if (wDom) {
+                            let wChart = echarts.getInstanceByDom(wDom) || echarts.init(wDom, 'dark', initOpts);
+                            let wData = {};
+                            data.forEach(x => {
+                                let c = this.getCreated(x);
+                                if(c && c !== '-') {
+                                    let dObj = new Date(c * 1000);
+                                    dObj.setUTCDate(dObj.getUTCDate() + 4 - (dObj.getUTCDay()||7));
+                                    let yearStart = new Date(Date.UTC(dObj.getUTCFullYear(),0,1));
+                                    let weekNo = Math.ceil(( ( (dObj - yearStart) / 86400000) + 1)/7);
+                                    let wKey = `${dObj.getUTCFullYear()}-W${weekNo.toString().padStart(2,'0')}`;
+                                    wData[wKey] = (wData[wKey]||0)+1;
+                                }
+                            });
+                            let sortedW = Object.keys(wData).sort();
+                            wChart.setOption({
+                                tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} },
+                                grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
+                                xAxis: { type: 'category', data: sortedW, axisLine: {lineStyle: {color: '#374151'}} },
+                                yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} },
+                                series: [{ data: sortedW.map(k=>wData[k]), type: 'bar', itemStyle: {color: colors[4], borderRadius: [4,4,0,0]} }]
+                            }, true);
+                        }
                         
-                        // Interaction handler mapping
-                        const applyFilter = (filterKey, value) => {
-                            if (!this.filters[filterKey].includes(value)) {
-                                this.filters[filterKey].push(value);
-                            }
-                        };
+                        // 7. Source
+                        let sDom = document.getElementById('chartSource');
+                        if (sDom) {
+                            let sChart = echarts.getInstanceByDom(sDom) || echarts.init(sDom, 'dark', initOpts);
+                            let sData = data.reduce((acc, curr) => { let s = this.getSource(curr); acc[s] = (acc[s]||0)+1; return acc; }, {});
+                            sChart.setOption({ 
+                                tooltip: { trigger: 'item', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
+                                series: [{ type: 'pie', radius: ['40%', '70%'], data: Object.keys(sData).map(k => ({name: k, value: sData[k]})), itemStyle: { borderRadius: 5, borderColor: '#1a233a', borderWidth: 2 } }], 
+                                color: colors 
+                            }, true);
+                            sChart.off('click'); sChart.on('click', p => applyFilter('source', p.name));
+                        }
                         
-                        // 1. Source (Pie)
-                        let sChart = echarts.getInstanceByDom(document.getElementById('chartSource')) || echarts.init(document.getElementById('chartSource'));
-                        let sData = data.reduce((acc, curr) => { let s = this.getSource(curr); acc[s] = (acc[s]||0)+1; return acc; }, {});
-                        sChart.setOption({ 
-                            tooltip: { trigger: 'item' }, 
-                            series: [{ type: 'pie', radius: ['40%', '70%'], data: Object.keys(sData).map(k => ({name: k, value: sData[k]})), itemStyle: { borderRadius: 5, borderColor: '#fff', borderWidth: 2 } }], 
-                            color: colors 
-                        }, true);
-                        sChart.off('click'); sChart.on('click', p => applyFilter('source', p.name));
-                        
-                        // 2. Facility (Bar)
-                        let fChart = echarts.getInstanceByDom(document.getElementById('chartFacility')) || echarts.init(document.getElementById('chartFacility'));
-                        let fData = data.reduce((acc, curr) => { let f = this.getFacility(curr); acc[f] = (acc[f]||0)+1; return acc; }, {});
-                        let sortedF = Object.entries(fData).sort((a,b) => b[1] - a[1]).slice(0, 10);
-                        fChart.setOption({ 
-                            tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'} }, 
-                            grid: { left: '3%', right: '4%', bottom: '3%', top: '5%', containLabel: true }, 
-                            yAxis: { type: 'category', data: sortedF.map(x=>x[0]).reverse(), axisLabel: { interval: 0, width: 120, overflow: 'truncate' } }, 
-                            xAxis: { type: 'value' }, 
-                            series: [{ data: sortedF.map(x=>x[1]).reverse(), type: 'bar', itemStyle: {color: colors[0], borderRadius: [0,4,4,0]} }] 
-                        }, true);
-                        fChart.off('click'); fChart.on('click', p => applyFilter('facility', p.name));
-
-                        // 3. Leg (Bar)
-                        let lChart = echarts.getInstanceByDom(document.getElementById('chartLeg')) || echarts.init(document.getElementById('chartLeg'));
-                        let lData = data.reduce((acc, curr) => { let l = this.getLeg(curr); acc[l] = (acc[l]||0)+1; return acc; }, {});
-                        let sortedL = Object.entries(lData).sort((a,b) => b[1] - a[1]);
-                        lChart.setOption({ 
-                            tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'} }, 
-                            grid: { left: '3%', right: '4%', bottom: '3%', top: '5%', containLabel: true },
-                            xAxis: { type: 'category', data: sortedL.map(x=>x[0]), axisLabel: { interval: 0, width: 80, overflow: 'truncate' } }, 
-                            yAxis: { type: 'value' }, 
-                            series: [{ data: sortedL.map(x=>x[1]), type: 'bar', itemStyle: {color: colors[1], borderRadius: [4,4,0,0]} }] 
-                        }, true);
-
-                        // 4. Aging Buckets (Bar)
-                        let aChart = echarts.getInstanceByDom(document.getElementById('chartAging')) || echarts.init(document.getElementById('chartAging'));
-                        let buckets = {'0-3 days':0, '4-7 days':0, '8-14 days':0, '15-30 days':0, '30+ days':0};
-                        data.forEach(x => {
-                            let c = this.getCreated(x);
-                            if(c && c !== '-') {
-                                let days = (now - c) / 86400;
-                                if(days <= 3) buckets['0-3 days']++;
-                                else if(days <= 7) buckets['4-7 days']++;
-                                else if(days <= 14) buckets['8-14 days']++;
-                                else if(days <= 30) buckets['15-30 days']++;
-                                else buckets['30+ days']++;
-                            }
-                        });
-                        aChart.setOption({
-                            tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'} },
-                            grid: { left: '3%', right: '4%', bottom: '3%', top: '5%', containLabel: true },
-                            xAxis: { type: 'category', data: Object.keys(buckets) },
-                            yAxis: { type: 'value' },
-                            series: [{ data: Object.values(buckets), type: 'bar', itemStyle: {color: colors[2], borderRadius: [4,4,0,0]} }]
-                        }, true);
-
-                        // 5. Avg Response Time by Facility
-                        let rChart = echarts.getInstanceByDom(document.getElementById('chartRespTime')) || echarts.init(document.getElementById('chartRespTime'));
-                        let fTimes = {};
-                        data.forEach(x => {
-                            let f = this.getFacility(x);
-                            let c = this.getCreated(x);
-                            let u = this.getUpdated(x);
-                            if(f !== 'Unknown' && c && c !== '-' && u && u !== '-') {
-                                let diffHours = Math.max(0, u - c) / 3600;
-                                if(!fTimes[f]) fTimes[f] = {sum: 0, count: 0};
-                                fTimes[f].sum += diffHours;
-                                fTimes[f].count++;
-                            }
-                        });
-                        let avgTimes = Object.keys(fTimes).map(k => [k, fTimes[k].sum / fTimes[k].count]).sort((a,b) => b[1] - a[1]).slice(0, 10);
-                        rChart.setOption({
-                            tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, valueFormatter: val => val.toFixed(1) + ' hrs' },
-                            grid: { left: '3%', right: '4%', bottom: '3%', top: '5%', containLabel: true },
-                            yAxis: { type: 'category', data: avgTimes.map(x=>x[0]).reverse(), axisLabel: { interval: 0, width: 100, overflow: 'truncate' } },
-                            xAxis: { type: 'value', name: 'Hours' },
-                            series: [{ data: avgTimes.map(x=>x[1].toFixed(1)).reverse(), type: 'bar', itemStyle: {color: colors[3], borderRadius: [0,4,4,0]} }]
-                        }, true);
-                        rChart.off('click'); rChart.on('click', p => applyFilter('facility', p.name));
-
-                        // 6. Daily Trend (Line)
-                        let dChart = echarts.getInstanceByDom(document.getElementById('chartDailyTrend')) || echarts.init(document.getElementById('chartDailyTrend'));
-                        let dData = {};
-                        data.forEach(x => {
-                            let c = this.getCreated(x);
-                            if(c && c !== '-') {
-                                let dt = new Date(c * 1000).toISOString().split('T')[0];
-                                dData[dt] = (dData[dt]||0)+1;
-                            }
-                        });
-                        let sortedD = Object.keys(dData).sort();
-                        dChart.setOption({
-                            tooltip: { trigger: 'axis' },
-                            grid: { left: '3%', right: '4%', bottom: '10%', top: '5%', containLabel: true },
-                            xAxis: { type: 'category', boundaryGap: false, data: sortedD },
-                            yAxis: { type: 'value' },
-                            series: [{ data: sortedD.map(k=>dData[k]), type: 'line', smooth: true, areaStyle: {opacity: 0.2}, itemStyle: {color: colors[0]}, symbolSize: 6 }]
-                        }, true);
-
-                        // 7. Exception Type Stacked Trend (Daily)
-                        let tChart = echarts.getInstanceByDom(document.getElementById('chartTypeTrend')) || echarts.init(document.getElementById('chartTypeTrend'));
-                        let tData = {}; // { date: { type: count } }
-                        let tTypes = new Set();
-                        data.forEach(x => {
-                            let c = this.getCreated(x);
-                            let t = this.getReason(x);
-                            if(c && c !== '-' && t && t !== '-') {
-                                let dt = new Date(c * 1000).toISOString().split('T')[0];
-                                if(!tData[dt]) tData[dt] = {};
-                                tData[dt][t] = (tData[dt][t]||0)+1;
-                                tTypes.add(t);
-                            }
-                        });
-                        let topTypes = Array.from(tTypes).sort((a,b) => {
-                            let sumA = Object.values(tData).reduce((s, d) => s + (d[a]||0), 0);
-                            let sumB = Object.values(tData).reduce((s, d) => s + (d[b]||0), 0);
-                            return sumB - sumA;
-                        }).slice(0, 6); // Max 6 types to avoid clutter
-                        
-                        let seriesData = topTypes.map((type, idx) => ({
-                            name: type,
-                            type: 'bar',
-                            stack: 'total',
-                            itemStyle: { color: colors[idx % colors.length] },
-                            data: sortedD.map(dt => tData[dt] && tData[dt][type] ? tData[dt][type] : 0)
-                        }));
-                        
-                        tChart.setOption({
-                            tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'} },
-                            legend: { data: topTypes, bottom: 0, type: 'scroll' },
-                            grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
-                            xAxis: { type: 'category', data: sortedD },
-                            yAxis: { type: 'value' },
-                            series: seriesData
-                        }, true);
-
-                        // 8. Weekly Trend (Bar)
-                        let wChart = echarts.getInstanceByDom(document.getElementById('chartWeekly')) || echarts.init(document.getElementById('chartWeekly'));
-                        let wData = {};
-                        data.forEach(x => {
-                            let c = this.getCreated(x);
-                            if(c && c !== '-') {
-                                let dObj = new Date(c * 1000);
-                                // Simple weekly grouping (ISO week)
-                                dObj.setUTCDate(dObj.getUTCDate() + 4 - (dObj.getUTCDay()||7));
-                                let yearStart = new Date(Date.UTC(dObj.getUTCFullYear(),0,1));
-                                let weekNo = Math.ceil(( ( (dObj - yearStart) / 86400000) + 1)/7);
-                                let wKey = `${dObj.getUTCFullYear()}-W${weekNo.toString().padStart(2,'0')}`;
-                                wData[wKey] = (wData[wKey]||0)+1;
-                            }
-                        });
-                        let sortedW = Object.keys(wData).sort();
-                        wChart.setOption({
-                            tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'} },
-                            grid: { left: '3%', right: '4%', bottom: '3%', top: '5%', containLabel: true },
-                            xAxis: { type: 'category', data: sortedW },
-                            yAxis: { type: 'value' },
-                            series: [{ data: sortedW.map(k=>wData[k]), type: 'bar', itemStyle: {color: colors[4], borderRadius: [4,4,0,0]} }]
-                        }, true);
+                        // 8. Leg
+                        let lDom = document.getElementById('chartLeg');
+                        if (lDom) {
+                            let lChart = echarts.getInstanceByDom(lDom) || echarts.init(lDom, 'dark', initOpts);
+                            let lData = data.reduce((acc, curr) => { let l = this.getLeg(curr); acc[l] = (acc[l]||0)+1; return acc; }, {});
+                            let sortedL = Object.entries(lData).sort((a,b) => b[1] - a[1]);
+                            lChart.setOption({ 
+                                tooltip: { trigger: 'axis', axisPointer: {type: 'shadow'}, backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
+                                grid: { left: '3%', right: '4%', bottom: '5%', top: '5%', containLabel: true },
+                                xAxis: { type: 'category', data: sortedL.map(x=>x[0]), axisLabel: { interval: 0, width: 80, overflow: 'truncate' }, axisLine: {lineStyle: {color: '#374151'}} }, 
+                                yAxis: { type: 'value', splitLine: {lineStyle: {color: '#1f2937', type: 'dashed'}} }, 
+                                series: [{ data: sortedL.map(x=>x[1]), type: 'bar', itemStyle: {color: colors[5], borderRadius: [4,4,0,0]} }] 
+                            }, true);
+                        }
 
                         window.addEventListener('resize', () => { 
-                            sChart.resize(); fChart.resize(); lChart.resize(); 
-                            aChart.resize(); rChart.resize(); dChart.resize(); 
-                            tChart.resize(); wChart.resize();
+                            ['chartDailyTrend', 'chartFacility', 'chartTypeTrend', 'chartAging', 'chartRespTime', 'chartWeekly', 'chartSource', 'chartLeg'].forEach(id => {
+                                let d = document.getElementById(id);
+                                if(d) { let i = echarts.getInstanceByDom(d); if(i) i.resize(); }
+                            });
                         });
                     });
-                }
-            },
-            watch: {
-                filters: {
-                    deep: true,
-                    handler() { this.page = 1; this.updateCharts(); }
-                },
-                excludeTestAWB() {
-                    this.page = 1;
-                    this.updateCharts();
                 }
             }
         });
