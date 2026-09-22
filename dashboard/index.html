@@ -1508,7 +1508,7 @@
                 try { Object.assign(state.settings, JSON.parse(s)); } catch(e){}
             }
             
-            // Clean invalid non-numeric values from Priority and ExceptionType
+            // Clean invalid non-numeric values from Priority and ExceptionType (and ensure defaults exist)
             let pStr = String(state.settings.priority || '');
             let eStr = String(state.settings.exceptionType || '');
             let pValid = pStr === '' || /^[0-9, ]+$/.test(pStr);
@@ -1519,11 +1519,14 @@
                 state.settings.priority = pValid ? pStr : '';
                 state.settings.exceptionType = eValid ? eStr : '';
                 saveSettings();
-                
                 let errHtml = `⚠️ Invalid text filters ("P0", "DBNR") detected in settings and reset. Please Clear Local Cache (in Settings) and Sync GTL to reload all data correctly.`;
                 showError(errHtml);
             }
-
+            
+            // Enforce missing vital defaults (Time Range and Status Codes)
+            if (!state.settings.defaultDays) state.settings.defaultDays = 60;
+            if (!state.settings.status) state.settings.status = '100,200,300';
+            
             document.getElementById('set-days').value = state.settings.defaultDays;
             document.getElementById('set-status').value = state.settings.status;
             document.getElementById('set-exclude').checked = state.settings.excludeTestAWB;
@@ -1533,13 +1536,21 @@
             setupAutoRefresh();
 
             // Extension handshake
-            document.addEventListener('gtl-extension-ready', markExtActive);
-            window.addEventListener('message', (e) => { if (e.data && e.data.source === 'GTL_EXTENSION' && e.data.type === 'PONG') markExtActive(); });
+            document.addEventListener('gtl-extension-ready', () => { console.log('gtl-extension-ready event fired'); markExtActive(); });
+            window.addEventListener('message', (e) => { 
+                if (e.data && e.data.source === 'GTL_EXTENSION' && e.data.type === 'PONG') {
+                    console.log('PONG received from extension');
+                    markExtActive(); 
+                }
+            });
             let pingCount = 0;
             let pinger = setInterval(() => {
-                window.postMessage({ type: 'PING' }, '*');
+                if (!state.extInstalled) {
+                    console.log('Sending PING to extension...');
+                    window.postMessage({ type: 'PING' }, '*');
+                }
                 pingCount++;
-                if (state.extInstalled || pingCount > 20) clearInterval(pinger);
+                if (state.extInstalled || pingCount > 40) clearInterval(pinger);
             }, 500);
 
             // DB
