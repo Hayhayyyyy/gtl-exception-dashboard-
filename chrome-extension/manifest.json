@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GTL Exception Dashboard",
-  "version": "3.1",
+  "version": "3.2",
   "description": "Intercepts GTL session data automatically to power the Realtime Dashboard.",
   "permissions": ["webRequest", "storage"],
   "host_permissions": [
@@ -27,6 +27,14 @@
       "run_at": "document_end"
     }
   ],
+  "externally_connectable": {
+    "matches": [
+      "https://*.aime-site.tiktok-row.net/*",
+      "https://*.tiktok-row.net/*",
+      "https://gtl-dashboard-a43c1.web.app/*",
+      "https://gtl-dashboard-a43c1.firebaseapp.com/*"
+    ]
+  },
   "icons": {
     "128": "icon.png"
   }
