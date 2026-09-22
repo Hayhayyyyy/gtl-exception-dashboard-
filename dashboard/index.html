@@ -351,7 +351,7 @@
     (function() {
         // --- State Management ---
         const state = {
-            view: 'dashboard',
+            view: 'view-dashboard',
             extInstalled: false,
             loading: false,
             loadingProgress: '',
@@ -488,6 +488,14 @@
             } else {
                 els.cacheAlert.classList.add('hidden');
             }
+            
+            // Re-render based on active tab
+            if (target === 'view-dashboard') {
+                renderKPIs();
+            } else if (target === 'view-table') {
+                renderTable();
+            }
+            
             updateCharts();
             setTimeout(() => { Object.values(state.charts).forEach(c => { if(c) c.resize(); }); }, 50);
         }
@@ -782,16 +790,16 @@
 
         // --- Charts Logic ---
         function updateCharts() {
-            if (state.filteredData.length === 0 || (state.view !== 'dashboard' && state.view !== 'analytics')) {
+            if (state.filteredData.length === 0 || (state.view !== 'view-dashboard' && state.view !== 'view-analytics')) {
                 els.chartsDashboard.style.display = 'none';
                 els.chartsAnalytics.style.display = 'none';
                 return;
             }
             
-            if (state.view === 'dashboard') {
+            if (state.view === 'view-dashboard') {
                 els.chartsDashboard.style.display = 'grid';
                 els.chartsAnalytics.style.display = 'none';
-            } else if (state.view === 'analytics') {
+            } else if (state.view === 'view-analytics') {
                 els.chartsDashboard.style.display = 'none';
                 els.chartsAnalytics.style.display = 'grid';
             }
@@ -816,7 +824,7 @@
             // ---- DASHBOARD TAB CHARTS ----
             // 1. Dashboard: Daily Trend (Last 14 days)
             let dChart = getChart('chartDailyTrend');
-            if (dChart && state.view === 'dashboard') {
+            if (dChart && state.view === 'view-dashboard') {
                 let dData = {};
                 let cutoff = now - (14 * 86400);
                 data.forEach(x => { 
@@ -838,7 +846,7 @@
 
             // 2. Dashboard: Status Distribution (Donut)
             let sChart = getChart('chartStatus');
-            if (sChart && state.view === 'dashboard') {
+            if (sChart && state.view === 'view-dashboard') {
                 let sData = data.reduce((acc, curr) => { let s = getStatus(curr); acc[s] = (acc[s]||0)+1; return acc; }, {});
                 sChart.setOption({ 
                     tooltip: { trigger: 'item', backgroundColor: '#111727', borderColor: '#1f2937', textStyle: {color: '#fff'} }, 
@@ -851,7 +859,7 @@
             // ---- ANALYTICS TAB CHARTS ----
             // 1. Analytics: Daily Trend (All Time)
             let aDailyChart = getChart('chartAnalyticsDaily');
-            if (aDailyChart && state.view === 'analytics') {
+            if (aDailyChart && state.view === 'view-analytics') {
                 let dData = {};
                 data.forEach(x => { 
                     let c = getCreated(x); 
@@ -872,7 +880,7 @@
 
             // 2. Analytics: Exception Type Distribution
             let aTypeChart = getChart('chartTypeDist');
-            if (aTypeChart && state.view === 'analytics') {
+            if (aTypeChart && state.view === 'view-analytics') {
                 let tData = data.reduce((acc, curr) => { let t = getReason(curr); if(t !== '-' && t !== 'Unknown') acc[t] = (acc[t]||0)+1; return acc; }, {});
                 let sortedT = Object.entries(tData).sort((a,b) => b[1] - a[1]).slice(0, 15);
                 aTypeChart.setOption({
@@ -887,7 +895,7 @@
 
             // 3. Analytics: Aging Buckets Analysis
             let aChart = getChart('chartAging');
-            if (aChart && state.view === 'analytics') {
+            if (aChart && state.view === 'view-analytics') {
                 let buckets = {'0-1 days':0, '1-3 days':0, '4-7 days':0, '8-14 days':0, '>14 days':0};
                 data.forEach(x => {
                     let c = getCreated(x);
@@ -911,7 +919,7 @@
 
             // 4. Analytics: Top Facilities
             let fChart = getChart('chartFacility');
-            if (fChart && state.view === 'analytics') {
+            if (fChart && state.view === 'view-analytics') {
                 let fData = data.reduce((acc, curr) => { let f = getFacility(curr); acc[f] = (acc[f]||0)+1; return acc; }, {});
                 let sortedF = Object.entries(fData).sort((a,b) => b[1] - a[1]).slice(0, 15);
                 fChart.setOption({ 
@@ -926,7 +934,7 @@
 
             // 5. Analytics: Avg Resp Time
             let rChart = getChart('chartRespTime');
-            if (rChart && state.view === 'analytics') {
+            if (rChart && state.view === 'view-analytics') {
                 let fTimes = {};
                 data.forEach(x => {
                     let f = getFacility(x), c = getCreated(x), u = getUpdated(x);
@@ -1188,7 +1196,7 @@
         });
         document.getElementById('btn-save-settings').addEventListener('click', () => {
             if(state.db) state.db.clear('cache');
-            switchView('dashboard');
+            switchView('view-dashboard');
             loadAllData();
         });
 
