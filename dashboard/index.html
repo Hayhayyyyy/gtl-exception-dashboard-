@@ -1,10 +1,10 @@
-<!-- GTL Dashboard v21.5 - deployed 2026-09-23 - fix missing div closing tag -->
+<!-- GTL Dashboard v21.6 - deployed 2026-09-23 - exclude test AWBs from all KPI metrics -->
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTL Exception Portal v21.5</title>
+    <title>GTL Exception Portal v21.6</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -45,7 +45,7 @@
         <aside class="w-64 bg-navy-800 border-r border-gray-800 flex flex-col shrink-0">
             <div class="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
                 <i class="fa-solid fa-truck-fast text-cyan-400 text-2xl mr-3"></i>
-                <h1 class="text-xl font-bold text-white tracking-wider">GTL<span class="text-cyan-400">Portal</span> <span class="text-xs text-gray-500 ml-2">v21.5</span></h1>
+                <h1 class="text-xl font-bold text-white tracking-wider">GTL<span class="text-cyan-400">Portal</span> <span class="text-xs text-gray-500 ml-2">v21.6</span></h1>
             </div>
             <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar" id="sidebar-nav">
                 <a data-target="view-dashboard" class="nav-item nav-active block px-4 py-3 rounded cursor-pointer transition flex items-center">
@@ -63,7 +63,7 @@
             </nav>
             <div class="p-4 border-t border-gray-800 text-xs text-gray-500 shrink-0">
                 <div id="ext-status" class="flex items-center text-red-400 mb-2"><i class="fa-solid fa-circle-xmark mr-2"></i> Ext Inactive</div>
-                <div>v21.5 (Pure Vanilla JS)</div>
+                <div>v21.6 (Pure Vanilla JS)</div>
             </div>
         </aside>
 
@@ -420,7 +420,7 @@
             settings: {
                 autoRefresh: true,
                 refreshInterval: 5,
-                excludeTestAWB: false,
+                excludeTestAWB: true,
                 defaultDays: 60,
                 priority: '',
                 status: '100,200,300',
@@ -431,6 +431,11 @@
         // --- Helpers ---
         const getVal = (r, keys) => { for (let k of keys) { if (r[k] !== undefined && r[k] !== null && r[k] !== '') return r[k]; } return null; };
         const getTracking = r => getVal(r, ['tracking_number', 'awb_number', 'waybill_number', 'tracking_id']) || '-';
+        // Test AWBs contain "TEST" anywhere in tracking number (case-insensitive), e.g. TEST*, *TEST*
+        const isTestAWB = r => {
+            const t = String(getTracking(r) || '').toUpperCase();
+            return t !== '-' && t.includes('TEST');
+        };
         const getReason = r => {
             // Prefer full human-readable path: exception_type_name > exception_reason > exception_type > reason > type
             let val = getVal(r, ['exception_type_name', 'exception_reason', 'exception_type', 'reason', 'type']);
@@ -654,13 +659,7 @@
             let testCount = 0;
             if (state.settings.excludeTestAWB) {
                 d = d.filter(x => {
-                    let t = String(getTracking(x)).toUpperCase();
-                    // If GTL7 is test, we exclude it. If GTL7 is the ONLY real one, we keep it.
-                    // To prevent filtering ALL data out, let's just exclude AWBs containing 'TEST' 
-                    // or keeping this logic but only if we know what it does.
-                    // The user noted excludeTestAWB blocked all rows. Let's just disable the destructive part 
-                    // or properly exclude standard test patterns.
-                    if (t.includes('TEST')) { testCount++; return false; }
+                    if (isTestAWB(x)) { testCount++; return false; }
                     return true;
                 });
             }
@@ -790,7 +789,8 @@
         }
 
         function renderKPIs() {
-            let d = state.filteredData;
+            // Belt-and-suspenders: always exclude test AWBs from KPI counts (regardless of toggle state)
+            let d = state.filteredData.filter(x => !isTestAWB(x));
             let now = Date.now() / 1000;
             let overSla = d.filter(x => getSLA(x) || getStatus(x) === 'Over SLA').length;
             let waiting = d.filter(x => getStatus(x) === 'Waiting Feedback').length;
