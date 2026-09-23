@@ -1,10 +1,10 @@
-<!-- GTL Dashboard v21.2 - deployed 2026-09-23 -->
+<!-- GTL Dashboard v21.3 - deployed 2026-09-23 -->
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTL Exception Portal v21.2</title>
+    <title>GTL Exception Portal v21.3</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -34,6 +34,7 @@
         .nav-active { background-color: rgba(6,182,212,0.1); color: #22d3ee; border-right-width: 2px; border-color: #22d3ee; }
         .nav-inactive { color: #9ca3af; }
         .nav-inactive:hover { color: #f3f4f6; background-color: rgba(255,255,255,0.05); }
+        .hidden { display: none !important; }
         .hidden-view { display: none !important; }
     </style>
 </head>
@@ -44,7 +45,7 @@
         <aside class="w-64 bg-navy-800 border-r border-gray-800 flex flex-col shrink-0">
             <div class="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
                 <i class="fa-solid fa-truck-fast text-cyan-400 text-2xl mr-3"></i>
-                <h1 class="text-xl font-bold text-white tracking-wider">GTL<span class="text-cyan-400">Portal</span> <span class="text-xs text-gray-500 ml-2">v21.2</span></h1>
+                <h1 class="text-xl font-bold text-white tracking-wider">GTL<span class="text-cyan-400">Portal</span> <span class="text-xs text-gray-500 ml-2">v21.3</span></h1>
             </div>
             <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar" id="sidebar-nav">
                 <a data-target="view-dashboard" class="nav-item nav-active block px-4 py-3 rounded cursor-pointer transition flex items-center">
@@ -62,7 +63,7 @@
             </nav>
             <div class="p-4 border-t border-gray-800 text-xs text-gray-500 shrink-0">
                 <div id="ext-status" class="flex items-center text-red-400 mb-2"><i class="fa-solid fa-circle-xmark mr-2"></i> Ext Inactive</div>
-                <div>v21.2 (Pure Vanilla JS)</div>
+                <div>v21.3 (Pure Vanilla JS)</div>
             </div>
         </aside>
 
@@ -147,7 +148,7 @@
                     </div>
 
                     <!-- Top 2 Charts -->
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="charts-dashboard" style="display:none;">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="charts-dashboard" class="hidden">
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
                             <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Exceptions Trend (Last 14 Days)</h3>
                             <div id="chartDailyTrend" class="chart-container"></div>
@@ -272,8 +273,8 @@
                 </div>
 
                 <!-- ANALYTICS VIEW -->
-                <div id="view-analytics" class="view-section hidden-view space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="charts-analytics" style="display:none;">
+                <div id="view-analytics" class="view-section hidden-view space-y-6 pb-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="charts-analytics" class="hidden">
                         <!-- Top Row: DBNR and Delivery Type -->
                         <div class="bg-navy-800 p-5 rounded-xl shadow-lg border border-gray-800">
                             <h3 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider text-orange-400">DBNR Daily Trend</h3>
@@ -321,7 +322,7 @@
                 </div>
 
                 <!-- SETTINGS VIEW -->
-                <div id="view-settings" class="view-section hidden-view max-w-4xl space-y-6">
+                <div id="view-settings" class="view-section hidden-view max-w-4xl space-y-6 pb-8">
                     <div class="bg-navy-800 rounded-xl shadow-lg border border-gray-800 overflow-hidden">
                         <div class="p-6 border-b border-gray-800">
                             <h3 class="text-lg font-bold text-white mb-1"><i class="fa-solid fa-sliders text-cyan-400 mr-2"></i> Dashboard Configuration</h3>
@@ -538,39 +539,58 @@
 
         // --- Core UI Updates ---
         function switchView(target) {
-            state.view = target;
-            els.navItems.forEach(n => {
-                n.classList.remove('nav-active');
-                n.classList.add('nav-inactive');
-                if (n.dataset.target === target) {
-                    n.classList.add('nav-active');
-                    n.classList.remove('nav-inactive');
-                    els.headerTitle.innerText = n.innerText.trim();
+            try {
+                state.view = target;
+                console.log('Switching to view:', target);
+                
+                els.navItems.forEach(n => {
+                    n.classList.remove('nav-active');
+                    n.classList.add('nav-inactive');
+                    if (n.dataset.target === target) {
+                        n.classList.add('nav-active');
+                        n.classList.remove('nav-inactive');
+                        els.headerTitle.innerText = n.innerText.trim();
+                    }
+                });
+                
+                els.views.forEach(v => {
+                    v.classList.add('hidden-view');
+                    if(v.id === target) {
+                        v.classList.remove('hidden-view');
+                        console.log('Showing view:', v.id);
+                    }
+                });
+                
+                if (['view-dashboard', 'view-table'].includes(target) && els.cacheText && els.cacheText.innerText) {
+                    els.cacheAlert.classList.remove('hidden');
+                } else {
+                    els.cacheAlert.classList.add('hidden');
                 }
-            });
-            els.views.forEach(v => {
-                v.classList.add('hidden-view');
-                if(v.id === target) v.classList.remove('hidden-view');
-            });
-            if (['view-dashboard', 'view-table'].includes(target) && els.cacheText.innerText) {
-                els.cacheAlert.classList.remove('hidden');
-            } else {
-                els.cacheAlert.classList.add('hidden');
+                
+                // Re-render based on active tab
+                if (target === 'view-dashboard') {
+                    console.log('Rendering KPIs');
+                    renderKPIs();
+                } else if (target === 'view-table') {
+                    console.log('Rendering Table');
+                    renderTable();
+                }
+                
+                // Update charts for both dashboard and analytics
+                console.log('Updating charts');
+                updateCharts();
+                
+                // Force resize of all charts after display change with larger delay
+                setTimeout(() => { 
+                    Object.values(state.charts).forEach(c => { 
+                        if(c) { 
+                            try { c.resize(); } catch(e) { console.warn('Chart resize error:', e); }
+                        } 
+                    }); 
+                }, 100);
+            } catch(e) {
+                console.error('Error in switchView:', e);
             }
-            
-            // Re-render based on active tab
-            if (target === 'view-dashboard') {
-                renderKPIs();
-            } else if (target === 'view-table') {
-                renderTable();
-            }
-            
-            // In case we switch to analytics, update charts
-            updateCharts();
-            // Force resize of all charts after display change
-            setTimeout(() => { 
-                Object.values(state.charts).forEach(c => { if(c) c.resize(); }); 
-            }, 50);
         }
 
         els.navItems.forEach(n => {
@@ -749,7 +769,7 @@
                     <td class="px-4 py-3 whitespace-nowrap text-sm"><span class="px-2 py-0.5 inline-flex text-xs leading-5 font-medium rounded border ${getStatusColor(getStatus(row))}">${getStatus(row)}</span></td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.processing_sla || '-'}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${formatTime(row.last_updated_time || row.updated_at)}</td>
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300 truncate max-w-xs" title="${getReason(row)}">${getReason(row)}</td>
+                    <td class="px-4 py-3 whitespace-normal text-sm text-gray-300  " title="${getReason(row)}">${getReason(row)}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm"><span class="px-2 py-0.5 inline-flex text-xs leading-5 font-medium rounded bg-gray-700 text-gray-300 border border-gray-600">${getPriority(row)}</span></td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.user_type || '-'}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.service_type || '-'}</td>
@@ -758,7 +778,7 @@
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.package_status ? (row.package_status.name || row.package_status) : '-'}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.assignee || '-'}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.client || '-'}</td>
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400 truncate max-w-xs" title="${row.exception_rule_id || ''}">${row.exception_rule_id || '-'}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400" title="${row.exception_rule_id || ''}">${row.exception_rule_id || '-'}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.task_no || '-'}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.task_type || '-'}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400">${row.review_feedback || row.decision || '-'}</td>
@@ -925,18 +945,23 @@
 
         // --- Charts Logic ---
         function updateCharts() {
+            try {
             if (state.view !== 'view-dashboard' && state.view !== 'view-analytics') {
-                els.chartsDashboard.style.display = 'none';
-                els.chartsAnalytics.style.display = 'none';
+                els.chartsDashboard.classList.add('hidden');
+                els.chartsAnalytics.classList.add('hidden');
                 return;
             }
             
             if (state.view === 'view-dashboard') {
-                els.chartsDashboard.style.display = 'grid';
-                els.chartsAnalytics.style.display = 'none';
+                els.chartsDashboard.classList.remove('hidden');
+                els.chartsDashboard.classList.add('grid');
+                els.chartsAnalytics.classList.add('hidden');
+                els.chartsAnalytics.classList.remove('grid');
             } else if (state.view === 'view-analytics') {
-                els.chartsDashboard.style.display = 'none';
-                els.chartsAnalytics.style.display = 'grid';
+                els.chartsDashboard.classList.add('hidden');
+                els.chartsDashboard.classList.remove('grid');
+                els.chartsAnalytics.classList.remove('hidden');
+                els.chartsAnalytics.classList.add('grid');
             }
             
             if (state.filteredData.length === 0) return; // Containers visible, but charts stay empty/zero
