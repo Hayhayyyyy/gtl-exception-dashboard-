@@ -1,10 +1,10 @@
-<!-- GTL Dashboard v21.6 - deployed 2026-09-23 - exclude test AWBs from all KPI metrics -->
+<!-- GTL Dashboard v21.7 - deployed 2026-09-23 - exclude test hubs; add AI Summary & Recommendations cards; fix insights "A" bug -->
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTL Exception Portal v21.6</title>
+    <title>GTL Exception Portal v21.7</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -45,7 +45,7 @@
         <aside class="w-64 bg-navy-800 border-r border-gray-800 flex flex-col shrink-0">
             <div class="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
                 <i class="fa-solid fa-truck-fast text-cyan-400 text-2xl mr-3"></i>
-                <h1 class="text-xl font-bold text-white tracking-wider">GTL<span class="text-cyan-400">Portal</span> <span class="text-xs text-gray-500 ml-2">v21.6</span></h1>
+                <h1 class="text-xl font-bold text-white tracking-wider">GTL<span class="text-cyan-400">Portal</span> <span class="text-xs text-gray-500 ml-2">v21.7</span></h1>
             </div>
             <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar" id="sidebar-nav">
                 <a data-target="view-dashboard" class="nav-item nav-active block px-4 py-3 rounded cursor-pointer transition flex items-center">
@@ -63,7 +63,7 @@
             </nav>
             <div class="p-4 border-t border-gray-800 text-xs text-gray-500 shrink-0">
                 <div id="ext-status" class="flex items-center text-red-400 mb-2"><i class="fa-solid fa-circle-xmark mr-2"></i> Ext Inactive</div>
-                <div>v21.6 (Pure Vanilla JS)</div>
+                <div>v21.7 (Pure Vanilla JS)</div>
             </div>
         </aside>
 
@@ -144,6 +144,38 @@
                         <div class="bg-navy-800 rounded-xl p-4 border border-rose-900/50 shadow-lg flex flex-col justify-center">
                             <div class="text-rose-500 text-xs font-medium mb-1 uppercase tracking-wider">Aging > 14d</div>
                             <div id="kpi-aging14" class="text-2xl font-bold text-rose-500">0</div>
+                        </div>
+                    </div>
+
+                    <!-- AI Summary & Recommendations (ADDITIVE, v21.7) -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-2" id="ai-cards-row">
+                        <!-- Card 1: Data Summary -->
+                        <div class="bg-navy-800 rounded-xl shadow-lg border border-gray-800 overflow-hidden">
+                            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                                <h3 class="text-sm font-bold text-gray-200 uppercase tracking-wider flex items-center">
+                                    <i class="fa-solid fa-chart-column text-cyan-400 mr-2"></i> Data Summary
+                                </h3>
+                                <button id="btn-refresh-summary" class="text-gray-400 hover:text-cyan-400 transition text-xs" title="Refresh summary">
+                                    <i class="fa-solid fa-rotate-right"></i>
+                                </button>
+                            </div>
+                            <div class="p-5 text-sm text-gray-300 leading-relaxed" id="ai-summary-text">
+                                Loading summary...
+                            </div>
+                        </div>
+                        <!-- Card 2: Recommendations -->
+                        <div class="bg-navy-800 rounded-xl shadow-lg border border-cyan-900/30 overflow-hidden">
+                            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                                <h3 class="text-sm font-bold text-cyan-300 uppercase tracking-wider flex items-center">
+                                    <i class="fa-solid fa-lightbulb text-yellow-400 mr-2"></i> Recommendations
+                                </h3>
+                                <button id="btn-refresh-reco" class="text-gray-400 hover:text-cyan-400 transition text-xs" title="Refresh recommendations">
+                                    <i class="fa-solid fa-rotate-right"></i>
+                                </button>
+                            </div>
+                            <div class="p-5 text-sm" id="ai-reco-text">
+                                Loading recommendations...
+                            </div>
                         </div>
                     </div>
 
@@ -436,6 +468,13 @@
             const t = String(getTracking(r) || '').toUpperCase();
             return t !== '-' && t.includes('TEST');
         };
+        // Test record = AWB contains "TEST" OR facility/hub name contains "test"
+        const isTestRecord = r => {
+            if (isTestAWB(r)) return true;
+            const fRaw = getVal(r, ['assigned_facility', 'hub_name', 'facility_name', 'current_facility', 'facility']) || '';
+            const fac = String(fRaw).toLowerCase();
+            return fac.includes('test');
+        };
         const getReason = r => {
             // Prefer full human-readable path: exception_type_name > exception_reason > exception_type > reason > type
             let val = getVal(r, ['exception_type_name', 'exception_reason', 'exception_type', 'reason', 'type']);
@@ -454,7 +493,7 @@
             return s || 'Unknown'; 
         };
         const getSource = r => getVal(r, ['source', 'exception_source']) || 'Unknown';
-        const getFacility = r => getVal(r, ['assigned_facility', 'current_facility', 'facility']) || 'Unknown';
+        const getFacility = r => getVal(r, ['assigned_facility', 'hub_name', 'facility_name', 'current_facility', 'facility']) || 'Unknown';
         const getPackageStatus = r => getVal(r, ['package_status']) || 'Unknown';
         const getLeg = r => getVal(r, ['shipment_leg_type', 'shipment_leg', 'leg']) || 'Unknown';
         const getDelivery = r => getVal(r, ['delivery_type']) || 'Unknown';
@@ -541,7 +580,12 @@
             tableTotal: document.getElementById('table-total'),
             tableTestHidden: document.getElementById('table-test-hidden'),
             filterStart: document.getElementById('filter-start-date'),
-            filterEnd: document.getElementById('filter-end-date')
+            filterEnd: document.getElementById('filter-end-date'),
+            // v21.7 AI Summary + Recommendations
+            aiSummaryText: document.getElementById('ai-summary-text'),
+            aiRecoText: document.getElementById('ai-reco-text'),
+            btnRefreshSummary: document.getElementById('btn-refresh-summary'),
+            btnRefreshReco: document.getElementById('btn-refresh-reco')
         };
 
         // --- Core UI Updates ---
@@ -655,11 +699,11 @@
             let d = state.rawData;
             let f = state.filters;
             
-            // Exclude Test AWBs
+            // Exclude Test AWBs / Test Facility records
             let testCount = 0;
             if (state.settings.excludeTestAWB) {
                 d = d.filter(x => {
-                    if (isTestAWB(x)) { testCount++; return false; }
+                    if (isTestRecord(x)) { testCount++; return false; }
                     return true;
                 });
             }
@@ -789,8 +833,8 @@
         }
 
         function renderKPIs() {
-            // Belt-and-suspenders: always exclude test AWBs from KPI counts (regardless of toggle state)
-            let d = state.filteredData.filter(x => !isTestAWB(x));
+            // Belt-and-suspenders: always exclude test records (test AWBs + test facilities) from KPI counts (regardless of toggle state)
+            let d = state.filteredData.filter(x => !isTestRecord(x));
             let now = Date.now() / 1000;
             let overSla = d.filter(x => getSLA(x) || getStatus(x) === 'Over SLA').length;
             let waiting = d.filter(x => getStatus(x) === 'Waiting Feedback').length;
@@ -839,13 +883,106 @@
                 let topFac = Object.keys(fCount).sort((a,b) => fCount[b] - fCount[a])[0];
                 let topType = Object.keys(tCount).sort((a,b) => tCount[b] - tCount[a])[0];
                 let parts = [];
-                if (topFac) parts.push(`&#128205; <strong class="text-white">${topFac}</strong> has the most exceptions (<strong class="text-white">${fCount[topFac]}</strong>).`);
-                if (d.length > 0 && (overSla / d.length) > 0.2) parts.push(`&#9888; <strong class="text-red-400">${((overSla / d.length) * 100).toFixed(1)}%</strong> are currently over SLA.`);
-                if (aging14 > 0) parts.push(`&#128308; <strong class="text-rose-400">${aging14}</strong> cases older than 14 days.`);
-                if (topType) parts.push(`&#128202; Top issue: <strong class="text-white">${topType}</strong> (${tCount[topType]} cases).`);
+                if (topFac) parts.push(`<i class="fa-solid fa-location-dot mr-1"></i> <strong class="text-white">${topFac}</strong> has the most exceptions (<strong class="text-white">${fCount[topFac]}</strong>).`);
+                if (d.length > 0 && (overSla / d.length) > 0.2) parts.push(`<i class="fa-solid fa-triangle-exclamation mr-1"></i> <strong class="text-red-400">${((overSla / d.length) * 100).toFixed(1)}%</strong> are currently over SLA.`);
+                if (aging14 > 0) parts.push(`<i class="fa-solid fa-circle mr-1"></i> <strong class="text-rose-400">${aging14}</strong> cases older than 14 days.`);
+                if (topType) parts.push(`<i class="fa-solid fa-chart-simple mr-1"></i> Top issue: <strong class="text-white">${topType}</strong> (${tCount[topType]} cases).`);
                 els.insightsText.innerHTML = parts.length > 0 ? parts.join(' &nbsp; <span class="text-gray-600">|</span> &nbsp; ') : "Everything looks healthy!";
             } else {
                 els.insightsBanner.classList.add('hidden');
+            }
+
+            // v21.7: Refresh AI Summary & Recommendation cards after KPIs are computed
+            renderSummaryCards(d, { total: d.length, overSla, waiting, submitted, dbnrCount, avgAge: parseFloat(validAges > 0 ? (totalAgeDays / validAges).toFixed(1) : '0'), aging7, aging14, fCount, tCount });
+        }
+
+        // --- AI Summary & Recommendation cards (v21.7) ---
+        function renderSummaryCards(srcData, kpi) {
+            if (!els.aiSummaryText || !els.aiRecoText) return;
+            try {
+                // Recompute clean data (exclude test records) if not provided pre-filtered
+                let d = srcData || state.filteredData.filter(x => !isTestRecord(x));
+                let now = Date.now() / 1000;
+
+                let overSla, waiting, submitted, dbnrCount, avgAge, aging7, aging14, fCount, tCount, validAges, totalAgeDays;
+                if (kpi) {
+                    ({ overSla, waiting, submitted, dbnrCount, avgAge, aging7, aging14, fCount, tCount } = kpi);
+                } else {
+                    overSla = d.filter(x => getSLA(x) || getStatus(x) === 'Over SLA').length;
+                    waiting = d.filter(x => getStatus(x) === 'Waiting Feedback').length;
+                    submitted = d.filter(x => getStatus(x) === 'Feedback Submitted').length;
+                    dbnrCount = d.filter(x => String(getReason(x)).toLowerCase().includes('delivered but not received')).length;
+                    totalAgeDays = 0; aging7 = 0; aging14 = 0; validAges = 0; fCount = {}; tCount = {};
+                    d.forEach(x => {
+                        let c = getCreated(x);
+                        if (c && c !== '-') {
+                            let ageDays = (now - c) / 86400;
+                            if (ageDays >= 0) { totalAgeDays += ageDays; validAges++; if (ageDays > 14) aging14++; else if (ageDays > 7) aging7++; }
+                        }
+                        let f = getFacility(x); if (f !== 'Unknown' && f !== '-') fCount[f] = (fCount[f] || 0) + 1;
+                        let t = getReason(x); if (t !== 'Unknown' && t !== '-') tCount[t] = (tCount[t] || 0) + 1;
+                    });
+                    avgAge = validAges > 0 ? parseFloat((totalAgeDays / validAges).toFixed(1)) : 0;
+                }
+
+                const total = d.length;
+                const overslaPct = total > 0 ? ((overSla / total) * 100).toFixed(1) : '0.0';
+                const topFacKeys = Object.keys(fCount).sort((a, b) => fCount[b] - fCount[a]);
+                const topFac = topFacKeys[0] || null;
+                const topFacCount = topFac ? fCount[topFac] : 0;
+                const topTypeKeys = Object.keys(tCount).sort((a, b) => tCount[b] - tCount[a]);
+                const topType = topTypeKeys[0] || null;
+                const topTypeCount = topType ? tCount[topType] : 0;
+
+                // --- Summary Card ---
+                if (total === 0) {
+                    els.aiSummaryText.innerHTML = `<span class="text-gray-500 italic">No data available to summarize.</span>`;
+                } else {
+                    let sumHtml = `
+                        <div class="mb-2">Total <strong class="text-white">${total.toLocaleString()}</strong> exceptions loaded. 
+                        <strong class="text-red-400">${overSla}</strong> are Over SLA (<strong class="text-red-400">${overslaPct}%</strong>), 
+                        <strong class="text-yellow-400">${waiting}</strong> Waiting Feedback, 
+                        <strong class="text-cyan-400">${submitted}</strong> Feedback Submitted.</div>
+                        <div class="mb-2">DBNR cases: <strong class="text-orange-400">${dbnrCount}</strong>. 
+                        Average exception age: <strong class="text-indigo-400">${avgAge}</strong> days. 
+                        <strong class="text-rose-400">${aging14}</strong> cases older than 14 days.</div>
+                    `;
+                    if (topFac) sumHtml += `<div class="mb-1">Top facility: <strong class="text-white">${topFac}</strong> with <strong class="text-white">${topFacCount}</strong> exceptions.</div>`;
+                    if (topType) sumHtml += `<div>Top exception type: <strong class="text-white">${topType}</strong> (<strong class="text-white">${topTypeCount}</strong> cases).</div>`;
+                    els.aiSummaryText.innerHTML = sumHtml;
+                }
+
+                // --- Recommendations Card ---
+                let recos = [];
+                if (total > 0 && (overSla / total) > 0.3) {
+                    recos.push(`<div class="flex items-start mb-2"><i class="fa-solid fa-triangle-exclamation text-red-400 mt-1 mr-2"></i><span><strong class="text-red-400">High SLA breach rate</strong> — prioritize immediate action on <strong class="text-white">${overSla}</strong> Over SLA cases.</span></div>`);
+                }
+                if (dbnrCount > 100) {
+                    recos.push(`<div class="flex items-start mb-2"><i class="fa-solid fa-box-open text-orange-400 mt-1 mr-2"></i><span><strong class="text-orange-400">${dbnrCount}</strong> DBNR cases detected — coordinate with customer service team.</span></div>`);
+                }
+                if (avgAge > 7) {
+                    recos.push(`<div class="flex items-start mb-2"><i class="fa-solid fa-clock text-amber-400 mt-1 mr-2"></i><span>Average case age is <strong class="text-amber-400">${avgAge}</strong> days — review aging cases queue.</span></div>`);
+                }
+                if (aging14 > 500) {
+                    recos.push(`<div class="flex items-start mb-2"><i class="fa-solid fa-circle text-rose-400 mt-1 mr-2"></i><span><strong class="text-rose-400">${aging14}</strong> cases older than 14 days — escalation required.</span></div>`);
+                }
+
+                // Always show top 3 facilities as action targets
+                let top3 = topFacKeys.slice(0, 3).filter(Boolean);
+                if (top3.length > 0) {
+                    let listHtml = top3.map(f => `<span class="inline-block bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs mr-1 mb-1"><strong class="text-white">${f}</strong> <span class="text-gray-400">(${fCount[f]})</span></span>`).join('');
+                    recos.push(`<div class="mt-3 pt-3 border-t border-gray-800"><div class="text-xs uppercase tracking-wider text-gray-500 mb-2"><i class="fa-solid fa-bullseye mr-1"></i> Priority Action Targets (Top 3 Facilities)</div><div>${listHtml}</div></div>`);
+                }
+
+                if (recos.length === 0) {
+                    els.aiRecoText.innerHTML = `<div class="text-emerald-400 flex items-center"><i class="fa-solid fa-circle-check mr-2"></i> All metrics look healthy — no urgent actions flagged.</div>`;
+                } else {
+                    els.aiRecoText.innerHTML = recos.join('');
+                }
+            } catch (e) {
+                console.warn('renderSummaryCards error:', e);
+                if (els.aiSummaryText) els.aiSummaryText.innerHTML = `<span class="text-gray-500 italic">Summary unavailable.</span>`;
+                if (els.aiRecoText) els.aiRecoText.innerHTML = `<span class="text-gray-500 italic">Recommendations unavailable.</span>`;
             }
         }
 
@@ -1475,7 +1612,11 @@
         });
 
         els.btnLoadRem.addEventListener('click', () => loadAllData());
-        
+
+        // v21.7 Summary/Reco refresh buttons
+        if (els.btnRefreshSummary) els.btnRefreshSummary.addEventListener('click', () => renderSummaryCards());
+        if (els.btnRefreshReco) els.btnRefreshReco.addEventListener('click', () => renderSummaryCards());
+
         if (els.btnDbnr) els.btnDbnr.addEventListener('click', () => {
             let dbnrTypes = ['DBNR'];
             if (dbnrTypes.length === 0) {
